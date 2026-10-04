@@ -1,0 +1,34 @@
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+
+# Tauri
+app/src-tauri/target/
+app/src-tauri/gen/
+app/src-tauri/resources/driver/*
+!app/src-tauri/resources/driver/.gitkeep
+
+# MSBuild / Visual Studio / signing outputs
+driver/**/x64/
+driver/**/Release/
+driver/**/Debug/
+*.user
+.vs/
+*.pdb
+*.cat
+*.cer
+*.pfx
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+*.log
