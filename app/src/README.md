@@ -1,6 +1,6 @@
 # Open X3D Pro — frontend
 
-React 18 + TypeScript (strict) + Vite 5 + zustand, plain CSS modules. Talks to the Rust backend only through the commands and events in [`docs/CONTRACT.md`](../../docs/CONTRACT.md) §5.
+React 19 + TypeScript (strict) + Vite 8 + zustand, plain CSS modules. Talks to the Rust backend only through the commands and events in [`docs/CONTRACT.md`](../../docs/CONTRACT.md) §5.
 
 ## Run
 
