@@ -14,14 +14,14 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - name: Require signing secrets
+      - name: Require SignPath secrets
         env:
-          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
-          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
         run: |
-          $missing = 'SIGN_PFX_BASE64', 'SIGN_PFX_PASSWORD' | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
+          $missing = 'SIGNPATH_API_TOKEN', 'SIGNPATH_ORGANIZATION_ID' | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
           if ($missing) {
-            Write-Output "::error::Releases must be signed with a CA-issued code-signing certificate, but secret(s) $($missing -join ', ') are not set. Self-signed builds come from the Nightly workflow. See .github/workflows/README.md."
+            Write-Output "::error::Releases are signed through SignPath, but secret(s) $($missing -join ', ') are not set. Add them under Settings > Secrets and variables > Actions > New repository secret: SIGNPATH_API_TOKEN = API token of the SignPath CI user that submits to release-signing, SIGNPATH_ORGANIZATION_ID = the SignPath organization ID (shown on the signing policy page). Setup: .github/signpath/README.md. Self-signed builds come from the Nightly workflow."
             exit 1
           }
 
@@ -32,12 +32,15 @@ jobs:
           $version = $env:GITHUB_REF_NAME -replace '^v'
           $cargo = Get-Content Cargo.toml -Raw
           $inf = Get-Content driver/openx3d/openx3d.inf -Raw
+          $rc = Get-Content driver/openx3d/openx3d.rc -Raw
           # @(file, found, expected); DriverVer is numeric a.b.c.d, so compare a.b.c against the tag without any -suffix.
+          # The SignPath driver artifact configuration requires the DLL's ProductVersion string to be exactly a.b.c.0.
           $checks = @(
             @('app/src-tauri/tauri.conf.json version', (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version, $version),
             @('app/package.json version', (Get-Content app/package.json -Raw | ConvertFrom-Json).version, $version),
             @('Cargo.toml [workspace.package] version', $(if ($cargo -match '(?s)\[workspace\.package\](.*?)(?=\n\[|$)' -and $Matches[1] -match '(?m)^version\s*=\s*"([^"]+)"') { $Matches[1] }), $version),
-            @('driver/openx3d/openx3d.inf DriverVer', $(if ($inf -match 'DriverVer\s*=\s*[^,]+,\s*([\d.]+)') { $Matches[1].Split('.')[0..2] -join '.' }), ($version -split '-')[0])
+            @('driver/openx3d/openx3d.inf DriverVer', $(if ($inf -match 'DriverVer\s*=\s*[^,]+,\s*([\d.]+)') { $Matches[1].Split('.')[0..2] -join '.' }), ($version -split '-')[0]),
+            @('driver/openx3d/openx3d.rc ProductVersion', $(if ($rc -match 'VALUE\s+"ProductVersion",\s*"([^"]+)"') { $Matches[1] }), "$(($version -split '-')[0]).0")
           )
           $failed = $false
           foreach ($c in $checks) {
@@ -52,11 +55,11 @@ jobs:
     needs: check
     uses: ./.github/workflows/build.yml
     with:
-      signing: secrets
+      signing: signpath
       artifact-prefix: open-x3d-pro-release
     secrets:
-      SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
-      SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
 
   publish:
     needs: build
@@ -89,6 +92,10 @@ jobs:
           3. Unplug and replug the joystick, or reboot if the installer asks.
 
           Driver only, without the app: extract **openx3d-driver-$($env:VERSION).zip** and run **install.ps1** from an elevated PowerShell.
+
+          ### Code signing policy
+
+          Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org). Details: [Code signing policy]($($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)#code-signing-policy).
 
           ### SHA-256
 

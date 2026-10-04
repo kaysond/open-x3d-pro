@@ -56,12 +56,23 @@ cd driver/test && make                 # host build + run of the C pipeline agai
 
 ## Security note: beta signing certificate
 
-Nightly builds (Actions artifacts from every push to `main`) are signed with a throwaway self-signed certificate, not one issued by a public CA. To let Windows trust the driver catalog, the nightly installer adds that certificate (subject `Open X3D Pro (unsigned beta)`) to the **machine-wide** `Root` and `TrustedPublisher` certificate stores; the machine then trusts anything signed with that key. Tagged releases are signed with a CA-issued certificate and only touch `TrustedPublisher`. The uninstaller removes what it added; to remove a nightly certificate by hand, run from an elevated prompt:
+Nightly builds (Actions artifacts from every push to `main`) are signed with a throwaway self-signed certificate, not one issued by a public CA. To let Windows trust the driver catalog, the nightly installer adds that certificate (subject `Open X3D Pro (unsigned beta)`) to the **machine-wide** `Root` and `TrustedPublisher` certificate stores; the machine then trusts anything signed with that key. Tagged releases are signed by SignPath Foundation (CA-issued); the installer then changes no certificate store and Windows asks once whether to install software from that publisher. The uninstaller removes what it added; to remove a nightly certificate by hand, run from an elevated prompt:
 
 ```bat
 certutil -delstore Root "Open X3D Pro (unsigned beta)"
 certutil -delstore TrustedPublisher "Open X3D Pro (unsigned beta)"
 ```
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [@kaysond](https://github.com/kaysond)
+- Approvers: [@kaysond](https://github.com/kaysond)
+
+Only release builds are signed with this certificate: the installer and driver attached to GitHub Releases, built from this repository by GitHub Actions (`.github/workflows/release.yml`) from `v*` tags, each release approved manually. Nightly builds use the throwaway self-signed certificate described above and are not signed by SignPath.
+
+Privacy policy: This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The app makes no network connections and keeps its profiles in `%APPDATA%\OpenX3DPro`; only the installer may download the WebView2 bootstrapper from Microsoft if WebView2 is missing ([Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement)).
 
 ## License
 

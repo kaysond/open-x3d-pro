@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "driver" (project open-x3d-pro). Copy of the portal version; keep in sync.
+     The GitHub artifact is a ZIP (actions/upload-artifact) holding openx3d.dll and openx3d.cat at its root.
+     version = openx3d.rc ProductVersion (a.b.c.0), passed by build.yml. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="openx3d.dll" product-name="Open X3D Pro" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <catalog-file path="openx3d.cat">
+      <authenticode-sign />
+    </catalog-file>
+  </zip-file>
+</artifact-configuration>

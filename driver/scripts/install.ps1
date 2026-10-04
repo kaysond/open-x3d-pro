@@ -14,7 +14,11 @@ foreach ($f in $cer, $inf, (Join-Path $Dir 'openx3d.cat'), (Join-Path $Dir 'open
     if (-not (Test-Path $f)) { throw "missing $f" }
 }
 
-foreach ($store in 'Root', 'TrustedPublisher') {
+$x509 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $cer
+# Only a self-signed (nightly) certificate goes into the stores; a CA-issued one is shared with
+# other publishers, so Windows' one-time publisher prompt is the right trust boundary.
+$stores = if ($x509.Subject -eq $x509.Issuer) { 'Root', 'TrustedPublisher' } else { @() }
+foreach ($store in $stores) {
     certutil -addstore -f $store $cer | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "certutil -addstore $store failed ($LASTEXITCODE)" }
 }

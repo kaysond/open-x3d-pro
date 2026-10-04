@@ -76,7 +76,7 @@ Release CI does the same with an ephemeral or secret certificate.
 Run from an elevated PowerShell in the folder with `openx3d.inf/.dll/.cat/.cer`. The release zip or the app installer does the same.
 
 ```powershell
-.\install.ps1     # certutil -addstore Root + TrustedPublisher, pnputil /add-driver /install, prints the binding
+.\install.ps1     # self-signed cert only: certutil -addstore Root + TrustedPublisher; then pnputil /add-driver /install, prints the binding
 .\uninstall.ps1   # pnputil /delete-driver oemNN.inf /uninstall /force, /scan-devices, removes the certificates
 ```
 
@@ -98,7 +98,7 @@ Debugging: a Debug build logs `openx3d: ...` through `OutputDebugString`; view i
 ## Known limits
 
 - x64 only. ARM64 would need WHQL or attestation signing, because Windows on ARM requires Microsoft-signed drivers.
-- Nightly builds use a self-signed certificate that the installer adds to LocalMachine Root and TrustedPublisher (throwaway key per build). Tagged releases are CA-signed and only add to TrustedPublisher.
+- Nightly builds use a self-signed certificate that the installer adds to LocalMachine Root and TrustedPublisher (throwaway key per build). Tagged releases are CA-signed (SignPath Foundation) and add nothing to the stores; Windows prompts once for the publisher.
 - Supported OS: Windows 10 2004–22H2 (build 19041+) and Windows 11. Earlier builds have no matching models section.
 - No output reports and no force feedback (the stick has none). Feature report 4 is GET only.
 - Key bindings (keyboard chords) are emitted by the app, not the driver.
