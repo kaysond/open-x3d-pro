@@ -31,6 +31,8 @@ switch ($rc) {
     259 { Write-Warning 'Driver added to the store but no device was updated. Is the stick plugged in?' }
     default { throw "pnputil /add-driver failed with exit code $rc" }
 }
+$published = Get-WindowsDriver -Online | Where-Object { $_.OriginalFileName -like '*\openx3d.inf' } | ForEach-Object Driver
+Write-Output "Published as: $($published -join ', ')"
 
 Start-Sleep -Seconds 3 # let PnP restart the stack and hidclass enumerate Col01/Col02
 

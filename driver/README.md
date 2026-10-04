@@ -76,9 +76,11 @@ Release CI does the same with an ephemeral or secret certificate.
 Run from an elevated PowerShell in the folder with `openx3d.inf/.dll/.cat/.cer`. The release zip or the app installer does the same.
 
 ```powershell
-.\install.ps1     # self-signed cert only: certutil -addstore Root + TrustedPublisher; then pnputil /add-driver /install, prints the binding
-.\uninstall.ps1   # pnputil /delete-driver oemNN.inf /uninstall /force, /scan-devices, removes the certificates
+.\install.ps1     # self-signed cert only: certutil -addstore Root + TrustedPublisher; then pnputil /add-driver /install, prints the published oemNN.inf and the binding
+.\uninstall.ps1   # pnputil /delete-driver oemNN.inf /uninstall for every openx3d package (found via Get-WindowsDriver), /scan-devices, removes the certificates
 ```
+
+`pnputil /delete-driver` only accepts the published `oemNN.inf` name, never `openx3d.inf`. The app installer records it in `resources\driver\published.txt` at install time; its uninstaller deletes those packages (after checking `%WINDIR%\INF\oemNN.inf` is still openx3d's, since numbers are reused) and falls back to `Get-WindowsDriver` if the file is missing or a deletion fails.
 
 Rollback means running `uninstall.ps1`. Once the driver package is gone, PnP rebinds the stick to inbox `hidusb`/`input.inf` with no reboot. If the device is stuck, unplug and replug it, or run `pnputil /scan-devices`. Device Manager also works: Roll Back Driver, or Uninstall device with "Attempt to remove the driver" ticked.
 

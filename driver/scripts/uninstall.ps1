@@ -6,17 +6,14 @@
 #>
 $ErrorActionPreference = 'Stop'
 
-# pnputil labels are localized, so match file names only: split the listing into
-# per-driver blocks and take the oemNN.inf of every block that mentions openx3d.inf.
-$blocks = ((pnputil /enum-drivers) -join "`n") -split "`n\s*`n"
-$published = foreach ($b in $blocks) {
-    if ($b -match '(?i)\bopenx3d\.inf\b' -and $b -match '(?i)\b(oem\d+\.inf)\b') { $Matches[1] }
-}
+# pnputil /delete-driver only takes published oemNN.inf names; Get-WindowsDriver maps
+# them without parsing pnputil's localized text.
+$published = Get-WindowsDriver -Online | Where-Object { $_.OriginalFileName -like '*\openx3d.inf' } | ForEach-Object Driver
 
 if (-not $published) { Write-Output 'openx3d.inf is not in the driver store.' }
 foreach ($oem in $published) {
     Write-Output "Removing $oem"
-    pnputil /delete-driver $oem /uninstall /force
+    pnputil /delete-driver $oem /uninstall
     if ($LASTEXITCODE -notin 0, 3010) { Write-Warning "pnputil /delete-driver $oem exited with $LASTEXITCODE" }
 }
 
