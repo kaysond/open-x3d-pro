@@ -3,7 +3,6 @@
 ; The NSIS stub is 32-bit: 64-bit-only tools such as pnputil.exe are reached via Sysnative.
 
 !define X3D_DRIVER_DIR "$INSTDIR\resources\driver"
-!define X3D_CERT_CN "Open X3D Pro (unsigned beta)"
 
 ; Sets OUT to the native (64-bit) path of a System32 tool.
 !macro X3D_SYSTOOL OUT NAME
@@ -19,9 +18,12 @@
   ${If} ${FileExists} "${X3D_DRIVER_DIR}\openx3d.inf"
     !insertmacro X3D_SYSTOOL $1 "certutil.exe"
     DetailPrint "Trusting the Open X3D Pro driver signing certificate"
-    nsExec::ExecToLog '"$1" -addstore -f Root "${X3D_DRIVER_DIR}\openx3d.cer"'
-    Pop $0
-    DetailPrint "certutil -addstore Root: exit code $0"
+    ; CI stages self-signed.flag only for self-signed builds; a CA-issued certificate must not become a root.
+    ${If} ${FileExists} "${X3D_DRIVER_DIR}\self-signed.flag"
+      nsExec::ExecToLog '"$1" -addstore -f Root "${X3D_DRIVER_DIR}\openx3d.cer"'
+      Pop $0
+      DetailPrint "certutil -addstore Root: exit code $0"
+    ${EndIf}
     nsExec::ExecToLog '"$1" -addstore -f TrustedPublisher "${X3D_DRIVER_DIR}\openx3d.cer"'
     Pop $0
     DetailPrint "certutil -addstore TrustedPublisher: exit code $0"
@@ -48,6 +50,7 @@
 !macro NSIS_HOOK_PREUNINSTALL
   Push $0
   Push $1
+  Push $2
   !insertmacro X3D_SYSTOOL $1 "pnputil.exe"
   DetailPrint "Removing the Open X3D Pro driver"
   nsExec::ExecToLog '"$1" /delete-driver openx3d.inf /uninstall /force'
@@ -63,14 +66,28 @@
     DetailPrint "driver removal via published name: exit code $0"
   ${EndIf}
 
-  !insertmacro X3D_SYSTOOL $1 "certutil.exe"
-  DetailPrint "Removing the Open X3D Pro certificate"
-  nsExec::ExecToLog '"$1" -delstore Root "${X3D_CERT_CN}"'
-  Pop $0
-  DetailPrint "certutil -delstore Root: exit code $0"
-  nsExec::ExecToLog '"$1" -delstore TrustedPublisher "${X3D_CERT_CN}"'
-  Pop $0
-  DetailPrint "certutil -delstore TrustedPublisher: exit code $0"
+  ; cert-cn.txt (UTF-16LE, written by CI) holds the signing certificate's CN.
+  StrCpy $2 ""
+  ClearErrors
+  FileOpen $0 "${X3D_DRIVER_DIR}\cert-cn.txt" r
+  ${IfNot} ${Errors}
+    FileReadUTF16LE $0 $2
+    FileClose $0
+  ${EndIf}
+  ; Never run certutil -delstore with an empty CN.
+  ${If} $2 != ""
+    !insertmacro X3D_SYSTOOL $1 "certutil.exe"
+    DetailPrint "Removing the Open X3D Pro certificate ($2)"
+    ${If} ${FileExists} "${X3D_DRIVER_DIR}\self-signed.flag"
+      nsExec::ExecToLog '"$1" -delstore Root "$2"'
+      Pop $0
+      DetailPrint "certutil -delstore Root: exit code $0"
+    ${EndIf}
+    nsExec::ExecToLog '"$1" -delstore TrustedPublisher "$2"'
+    Pop $0
+    DetailPrint "certutil -delstore TrustedPublisher: exit code $0"
+  ${EndIf}
+  Pop $2
   Pop $1
   Pop $0
 !macroend

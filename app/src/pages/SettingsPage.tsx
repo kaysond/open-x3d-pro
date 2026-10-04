@@ -60,7 +60,7 @@ export function SettingsPage() {
       <section className={styles.card}>
         <h2>About the beta certificate</h2>
         <p className={styles.muted}>
-          Beta builds are signed with a self-signed certificate. The installer adds it to the machine&apos;s Root and
+          Nightly builds are signed with a self-signed certificate. The installer adds it to the machine&apos;s Root and
           TrustedPublisher stores so Windows accepts the driver, which means this PC trusts anything signed with it. The
           uninstaller removes it again.
         </p>
