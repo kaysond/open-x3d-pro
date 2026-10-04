@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "installer" (project open-x3d-pro). Copy of the portal version; keep in sync.
+     The GitHub artifact is a ZIP (actions/upload-artifact) holding only the NSIS setup exe.
+     SignPath cannot deep-sign NSIS installers, so the app exe and uninstaller inside stay unsigned.
+     version = tauri.conf.json version (Tauri writes it as the setup exe's ProductVersion), passed by build.yml. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="Open-X3D-Pro_${version}_x64-setup.exe" product-name="Open X3D Pro" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
