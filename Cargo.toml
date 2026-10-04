@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["core", "app/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/kaysond/open-x3d-pro"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
