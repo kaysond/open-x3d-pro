@@ -32,3 +32,6 @@ driver/**/Debug/
 Thumbs.db
 
 *.log
+
+# sandbox artefact
+.mcp.json

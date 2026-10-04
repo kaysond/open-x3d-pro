@@ -1,0 +1,38 @@
+[package]
+name = "open-x3d-pro"
+description = "Open X3D Pro tray agent: profiles, live input view and driver config push"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# Distinct from the bin name to avoid a PDB name clash on Windows (rust-lang/cargo#8519).
+name = "open_x3d_pro_lib"
+
+[dependencies]
+x3d-core = { path = "../../core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+log = "0.4"
+
+# Tauri needs webkit2gtk/gtk dev packages on Linux; the app only ships on Windows, so the
+# shell, HID and Win32 code are Windows-only and Linux builds just the testable logic.
+[target.'cfg(windows)'.dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+hidapi = { version = "2", default-features = false, features = ["windows-native"] }
+env_logger = "0.11"
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Threading",
+  "Win32_UI_Accessibility",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(windows)'.build-dependencies]
+tauri-build = { version = "2", features = [] }

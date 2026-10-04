@@ -1,0 +1,5 @@
+- [ ] `docs/CONTRACT.md` updated in this PR if any interface between components changed
+- [ ] Tests added or updated (`cargo test`, `driver/test`, frontend tests)
+- [ ] Test vectors regenerated (`cargo run -p x3d-core --bin gen-vectors`) if the pipeline or blob changed
+- [ ] CI green (Linux and Windows jobs)
+- [ ] Driver/INF/installer changes tested on a Windows machine with Secure Boot and Memory Integrity (HVCI) on
