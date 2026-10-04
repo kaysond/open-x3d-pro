@@ -33,7 +33,7 @@ Open-source replacement for Logitech Gaming Software 5.10 for the Logitech Extre
 │   ├── src-tauri/          Rust backend (tauri.conf.json, capabilities/, windows/hooks.nsh, icons/)
 │   ├── src/                React + TypeScript + Vite frontend
 │   └── ...
-├── .github/workflows/      ci.yml, release.yml
+├── .github/workflows/      ci.yml, build.yml, nightly.yml, release.yml
 ├── docs/                   CONTRACT.md, research.md
 ├── README.md, LICENSE (MIT), .gitignore, .editorconfig
 ```
@@ -56,7 +56,7 @@ cd driver/test && make                 # host build + run of the C pipeline agai
 
 ## Security note: beta signing certificate
 
-Beta builds are signed with a self-signed code-signing certificate, not one issued by a public CA. To let Windows trust the driver catalog, the installer adds that certificate (subject `Open X3D Pro`) to the **machine-wide** `Root` and `TrustedPublisher` certificate stores. This means the machine will trust anything signed with that certificate. The uninstaller removes it; to remove it by hand, run from an elevated prompt:
+Nightly builds (Actions artifacts from every push to `main`) are signed with a throwaway self-signed certificate, not one issued by a public CA. To let Windows trust the driver catalog, the nightly installer adds that certificate (subject `Open X3D Pro (unsigned beta)`) to the **machine-wide** `Root` and `TrustedPublisher` certificate stores; the machine then trusts anything signed with that key. Tagged releases are signed with a CA-issued certificate and only touch `TrustedPublisher`. The uninstaller removes what it added; to remove a nightly certificate by hand, run from an elevated prompt:
 
 ```bat
 certutil -delstore Root "Open X3D Pro (unsigned beta)"

@@ -98,7 +98,7 @@ Debugging: a Debug build logs `openx3d: ...` through `OutputDebugString`; view i
 ## Known limits
 
 - x64 only. ARM64 would need WHQL or attestation signing, because Windows on ARM requires Microsoft-signed drivers.
-- The certificate is a self-signed beta certificate that the installer adds to LocalMachine Root and TrustedPublisher. Anyone holding its private key could sign code your machine trusts; release CI uses a throwaway key per build.
+- Nightly builds use a self-signed certificate that the installer adds to LocalMachine Root and TrustedPublisher (throwaway key per build). Tagged releases are CA-signed and only add to TrustedPublisher.
 - Supported OS: Windows 10 2004–22H2 (build 19041+) and Windows 11. Earlier builds have no matching models section.
 - No output reports and no force feedback (the stick has none). Feature report 4 is GET only.
 - Key bindings (keyboard chords) are emitted by the app, not the driver.

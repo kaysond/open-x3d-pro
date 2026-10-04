@@ -1,0 +1,169 @@
+name: Build installer
+
+# Shared by nightly.yml and release.yml: signed driver package + signed NSIS installer, uploaded as one artifact.
+on:
+  workflow_call:
+    inputs:
+      signing:
+        description: "'self-signed' (throwaway certificate made in the job) or 'secrets' (SIGN_PFX_BASE64 + SIGN_PFX_PASSWORD)"
+        type: string
+        required: true
+      artifact-prefix:
+        description: Artifact name; '-<sha7>' is appended
+        type: string
+        required: true
+    secrets:
+      SIGN_PFX_BASE64:
+        required: false
+      SIGN_PFX_PASSWORD:
+        required: false
+    outputs:
+      artifact:
+        description: Name of the uploaded artifact
+        value: ${{ jobs.build.outputs.artifact }}
+      version:
+        description: App version from tauri.conf.json
+        value: ${{ jobs.build.outputs.version }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      SIGNING: ${{ inputs.signing }}
+      ARTIFACT_PREFIX: ${{ inputs.artifact-prefix }}
+    outputs:
+      artifact: ${{ steps.collect.outputs.artifact }}
+      version: ${{ steps.collect.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Signing certificate
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: |
+          $pfx = "$env:RUNNER_TEMP\openx3d.pfx"
+          switch ($env:SIGNING) {
+            'self-signed' {
+              $pw = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+              Write-Output "::add-mask::$pw"
+              & driver/scripts/make-cert.ps1 -OutDir $env:RUNNER_TEMP -PfxPassword $pw
+              # Trusted on the runner only, so signtool verify /pa passes and Tauri leaves the signed driver DLL alone.
+              Import-Certificate -FilePath "$env:RUNNER_TEMP\openx3d.cer" -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+            }
+            'secrets' {
+              if (-not $env:SIGN_PFX_BASE64 -or -not $env:SIGN_PFX_PASSWORD) {
+                throw 'signing=secrets needs the SIGN_PFX_BASE64 and SIGN_PFX_PASSWORD secrets'
+              }
+              $pw = $env:SIGN_PFX_PASSWORD
+              [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+              Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString $pw -AsPlainText -Force) | Out-Null
+            }
+            default { throw "unknown signing mode '$env:SIGNING'" }
+          }
+          $x509 = [Security.Cryptography.X509Certificates.X509Certificate2]::new($pfx, $pw)
+          Write-Output "Signing as $($x509.Subject) ($($x509.Thumbprint))"
+          "PFX_PW=$pw" >> $env:GITHUB_ENV
+          "CERT_THUMBPRINT=$($x509.Thumbprint)" >> $env:GITHUB_ENV
+          "CERT_CN=$($x509.GetNameInfo('SimpleName', $false))" >> $env:GITHUB_ENV
+          "CERT_SUBJECT=$($x509.Subject)" >> $env:GITHUB_ENV
+
+      - uses: microsoft/setup-msbuild@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Put signtool and Inf2Cat on PATH
+        run: |
+          foreach ($exe in 'x64\signtool.exe', 'x86\Inf2Cat.exe') {
+            $f = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$exe" |
+              Sort-Object { $_.VersionInfo.FileVersionRaw } -Descending | Select-Object -First 1
+            if (-not $f) { throw "$exe not found under Windows Kits\10\bin" }
+            Write-Output "Using $($f.FullName)"
+            $f.DirectoryName >> $env:GITHUB_PATH
+          }
+
+      - name: Build driver (Release x64)
+        run: msbuild driver/openx3d/openx3d.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Package and stage driver
+        run: |
+          & driver/scripts/package.ps1 -BuildDir driver/openx3d/x64/Release -OutDir staging/driver -PfxPath "$env:RUNNER_TEMP\openx3d.pfx" -PfxPassword $env:PFX_PW
+          # CONTRACT §6: the installer bundles exactly these four from resources/driver/.
+          $files = 'openx3d.inf', 'openx3d.dll', 'openx3d.cat', 'openx3d.cer' | ForEach-Object { "staging/driver/$_" }
+          $missing = $files | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "package.ps1 did not produce: $($missing -join ', ')" }
+          $res = 'app/src-tauri/resources/driver'
+          Copy-Item $files $res
+          # Read by hooks.nsh: the CN for certutil -delstore on uninstall, and whether to trust the cert as a root.
+          [IO.File]::WriteAllText((Join-Path $PWD "$res/cert-cn.txt"), $env:CERT_CN, [Text.Encoding]::Unicode)
+          if ($env:SIGNING -eq 'self-signed') { New-Item -ItemType File "$res/self-signed.flag" -Force | Out-Null }
+
+      - run: npm ci
+        working-directory: app
+
+      # Tauri signs the app exe, the uninstaller, its NSIS plugins and the setup exe with signtool /sha1 <thumbprint>
+      # (key in CurrentUser\My), so the PFX password stays out of the config and the generated installer.nsi.
+      - name: Build NSIS installer
+        working-directory: app
+        run: |
+          @{ bundle = @{ windows = @{
+            certificateThumbprint = $env:CERT_THUMBPRINT
+            digestAlgorithm = 'sha256'
+            timestampUrl = 'http://timestamp.digicert.com'
+            tsp = $true
+          } } } | ConvertTo-Json -Depth 5 | Set-Content "$env:RUNNER_TEMP\tauri-sign.json"
+          npm run tauri -- build --bundles nsis --config "$env:RUNNER_TEMP\tauri-sign.json"
+
+      - name: Collect artifact
+        id: collect
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $version = (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          # app/src-tauri is a member of the root workspace, so the bundle lands in the root target dir.
+          $target = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory
+          $setup = @(Get-ChildItem "$target\release\bundle\nsis\*-setup.exe")
+          if ($setup.Count -ne 1) { throw "expected one NSIS setup exe in $target\release\bundle\nsis, found $($setup.Count)" }
+          New-Item -ItemType Directory artifacts -Force | Out-Null
+          $exe = "artifacts\Open-X3D-Pro_${version}_x64-setup.exe"
+          Copy-Item $setup[0].FullName $exe
+          # Fails the build if Tauri skipped signing or a signature does not chain to a trusted root.
+          signtool verify /pa $exe staging\driver\openx3d.dll staging\driver\openx3d.cat
+          $zipped = @('openx3d.inf', 'openx3d.dll', 'openx3d.cat', 'openx3d.cer' | ForEach-Object { "staging/driver/$_" }) +
+            'driver/scripts/install.ps1', 'driver/scripts/uninstall.ps1'
+          Compress-Archive -Path $zipped -DestinationPath "artifacts\openx3d-driver-$version.zip"
+          Copy-Item staging/driver/openx3d.cer artifacts/
+          @(
+            "Open X3D Pro $version"
+            "commit: $env:GITHUB_SHA ($env:GITHUB_REF)"
+            "built:  $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
+            "run:    $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            "signer: $env:CERT_SUBJECT ($env:CERT_THUMBPRINT, $env:SIGNING)"
+          ) | Set-Content artifacts\BUILD_INFO.txt
+          $sums = Get-ChildItem artifacts -File | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+          $sums | Set-Content artifacts\SHA256SUMS.txt
+          $sums
+          "artifact=${env:ARTIFACT_PREFIX}-$($env:GITHUB_SHA.Substring(0, 7))" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.collect.outputs.artifact }}
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: error
+          # lets "Re-run all jobs" replace the artifact of the earlier attempt
+          overwrite: true
