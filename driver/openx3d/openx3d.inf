@@ -1,0 +1,120 @@
+; openx3d.inf - Open X3D Pro: UMDF 2 HID minidriver for the Logitech Extreme 3D Pro.
+; Replaces hidusb as the function driver of USB\VID_046D&PID_C215; mshidumdf is the
+; kernel HID minidriver, WUDFRd (lower filter) hosts openx3d.dll in user mode.
+; Win10 sections use explicit AddService (no MsHidUmdf.inf before build 22000);
+; Win11 sections Include the inbox INFs (InfVerif 2084). Same split as DsHidMini.
+; Validate with: infverif /v /h openx3d.inf
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = HIDClass
+ClassGuid   = {745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider    = %Mfg%
+CatalogFile = openx3d.cat
+DriverVer   = 10/03/2026,0.1.0.0
+PnpLockdown = 1
+
+[SourceDisksNames]
+1 = %DiskName%,,,
+
+[SourceDisksFiles]
+openx3d.dll = 1
+
+; Run from the driver store (DIRID 13): required by InfVerif /w, fine for UMDF since 1803.
+[DestinationDirs]
+DefaultDestDir = 13
+
+[Manufacturer]
+%Mfg% = OpenX3D, NTamd64.10.0...19041, NTamd64.10.0...22000
+
+; The REV_0204 line ranks 0x00FF0000, the plain ID 0x00FF0001. Inbox input.inf is
+; 0x00FF2005 on Win11; LGS's Win10 INF is 0x00FF0001, so REV_0204 (then DriverVer) wins.
+[OpenX3D.NTamd64.10.0...19041]
+%DeviceDesc% = OpenX3D_Win10, USB\VID_046D&PID_C215&REV_0204
+%DeviceDesc% = OpenX3D_Win10, USB\VID_046D&PID_C215
+
+[OpenX3D.NTamd64.10.0...22000]
+%DeviceDesc% = OpenX3D_Win11, USB\VID_046D&PID_C215&REV_0204
+%DeviceDesc% = OpenX3D_Win11, USB\VID_046D&PID_C215
+
+[OpenX3D.CopyFiles]
+openx3d.dll
+
+; ---------------- Windows 10 2004 .. 22H2 ----------------
+
+[OpenX3D_Win10.NT]
+CopyFiles = OpenX3D.CopyFiles
+
+[OpenX3D_Win10.NT.hw]
+AddReg = OpenX3D_Win10.AddReg
+
+[OpenX3D_Win10.AddReg]
+HKR,,"LowerFilters",0x00010000,"WUDFRd"    ; FLG_ADDREG_TYPE_MULTI_SZ
+
+[OpenX3D_Win10.NT.Services]
+AddService = WUDFRd,0x000001f8,WUDFRD_ServiceInstall        ; NOCLOBBER_* : leave the inbox service as is
+AddService = mshidumdf,0x000001fa,mshidumdf_ServiceInstall  ; + SPSVCINST_ASSOCSERVICE (function driver)
+
+[WUDFRD_ServiceInstall]
+DisplayName   = %WudfRdDisplayName%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\WUDFRd.sys
+
+[mshidumdf_ServiceInstall]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\mshidumdf.sys
+
+[OpenX3D_Win10.NT.Wdf]
+UmdfService                = openx3d, openx3d_Install
+UmdfServiceOrder           = openx3d
+UmdfDispatcher             = NativeUSB
+UmdfKernelModeClientPolicy = AllowKernelModeClients
+UmdfFileObjectPolicy       = AllowNullAndUnknownFileObjects
+UmdfFsContextUsePolicy     = CanUseFsContext2
+UmdfMethodNeitherAction    = Copy
+UmdfHostPriority           = PriorityHigh
+
+; ---------------- Windows 11 ----------------
+
+[OpenX3D_Win11.NT]
+Include   = MsHidUmdf.inf, WUDFRD.inf
+Needs     = MsHidUmdf.NT, WUDFRD_LowerFilter.NT
+CopyFiles = OpenX3D.CopyFiles
+
+[OpenX3D_Win11.NT.hw]
+Include = MsHidUmdf.inf, WUDFRD.inf
+Needs   = MsHidUmdf.NT.hw, WUDFRD_LowerFilter.NT.hw
+
+[OpenX3D_Win11.NT.Services]
+Include = MsHidUmdf.inf, WUDFRD.inf
+Needs   = MsHidUmdf.NT.Services, WUDFRD_LowerFilter.NT.Services
+
+[OpenX3D_Win11.NT.Filters]
+Include = WUDFRD.inf
+Needs   = WUDFRD_LowerFilter.NT.Filters
+
+[OpenX3D_Win11.NT.Wdf]
+UmdfService                = openx3d, openx3d_Install
+UmdfServiceOrder           = openx3d
+UmdfDispatcher             = NativeUSB
+UmdfKernelModeClientPolicy = AllowKernelModeClients
+UmdfFileObjectPolicy       = AllowNullAndUnknownFileObjects
+UmdfFsContextUsePolicy     = CanUseFsContext2
+UmdfMethodNeitherAction    = Copy
+UmdfHostPriority           = PriorityHigh
+
+; ---------------- common ----------------
+
+[openx3d_Install]
+UmdfLibraryVersion = 2.15.0
+ServiceBinary      = "%13%\openx3d.dll"
+
+[Strings]
+Mfg               = "Open X3D Pro project"
+DeviceDesc        = "Logitech Extreme 3D Pro (Open X3D Pro)"
+DiskName          = "Open X3D Pro driver disk"
+WudfRdDisplayName = "Windows Driver Foundation - User-mode Driver Framework Reflector"

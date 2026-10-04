@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check versions match tag
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v'
+          $cargo = Get-Content Cargo.toml -Raw
+          $inf = Get-Content driver/openx3d/openx3d.inf -Raw
+          # @(file, found, expected); DriverVer is numeric a.b.c.d, so compare a.b.c against the tag without any -suffix.
+          $checks = @(
+            @('app/src-tauri/tauri.conf.json version', (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version, $version),
+            @('app/package.json version', (Get-Content app/package.json -Raw | ConvertFrom-Json).version, $version),
+            @('Cargo.toml [workspace.package] version', $(if ($cargo -match '(?s)\[workspace\.package\](.*?)(?=\n\[|$)' -and $Matches[1] -match '(?m)^version\s*=\s*"([^"]+)"') { $Matches[1] }), $version),
+            @('driver/openx3d/openx3d.inf DriverVer', $(if ($inf -match 'DriverVer\s*=\s*[^,]+,\s*([\d.]+)') { $Matches[1].Split('.')[0..2] -join '.' }), ($version -split '-')[0])
+          )
+          $failed = $false
+          foreach ($c in $checks) {
+            if ($c[1] -ne $c[2]) {
+              Write-Output "::error::$($c[0]) is '$($c[1])' but tag $env:GITHUB_REF_NAME requires '$($c[2])'"
+              $failed = $true
+            }
+          }
+          if ($failed) { exit 1 }
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - uses: microsoft/setup-msbuild@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Put signtool and Inf2Cat on PATH
+        run: |
+          foreach ($exe in 'x64\signtool.exe', 'x86\Inf2Cat.exe') {
+            $f = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$exe" |
+              Sort-Object { $_.VersionInfo.FileVersionRaw } -Descending | Select-Object -First 1
+            if (-not $f) { throw "$exe not found under Windows Kits\10\bin" }
+            Write-Output "Using $($f.FullName)"
+            $f.DirectoryName >> $env:GITHUB_PATH
+          }
+
+      - name: Build driver (Release x64)
+        run: msbuild driver/openx3d/openx3d.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Prepare signing certificate
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: |
+          if ($env:SIGN_PFX_BASE64 -and $env:SIGN_PFX_PASSWORD) {
+            $pw = $env:SIGN_PFX_PASSWORD
+            [IO.File]::WriteAllBytes("$PWD\cert.pfx", [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+            $selfSigned = 'false'
+          } else {
+            $pw = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+            Write-Output "::add-mask::$pw"
+            $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Open X3D Pro (unsigned beta)' `
+              -CertStoreLocation Cert:\CurrentUser\My -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(5)
+            Export-PfxCertificate -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" -FilePath cert.pfx -Password (ConvertTo-SecureString $pw -AsPlainText -Force) | Out-Null
+            $selfSigned = 'true'
+          }
+          $x509 = [Security.Cryptography.X509Certificates.X509Certificate2]::new("$PWD\cert.pfx", $pw)
+          [IO.File]::WriteAllBytes("$PWD\openx3d.cer", $x509.Export('Cert'))
+          Write-Output "Signing as $($x509.Subject) ($($x509.Thumbprint)), self-signed=$selfSigned"
+          "PFX_PW=$pw" >> $env:GITHUB_ENV
+          "SELF_SIGNED=$selfSigned" >> $env:GITHUB_ENV
+
+      - name: Package and stage driver
+        run: |
+          & driver/scripts/package.ps1 -BuildDir driver/openx3d/x64/Release -OutDir staging/driver -PfxPath cert.pfx -PfxPassword $env:PFX_PW
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # CONTRACT §6: the installer bundles exactly these four from resources/driver/.
+          $files = 'openx3d.inf', 'openx3d.dll', 'openx3d.cat', 'openx3d.cer' | ForEach-Object { "staging/driver/$_" }
+          $missing = $files | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "package.ps1 did not produce: $($missing -join ', ')" }
+          Copy-Item $files app/src-tauri/resources/driver/
+
+      - run: npm ci
+        working-directory: app
+
+      # Built with the Tauri CLI directly instead of tauri-apps/tauri-action: the action uploads the installer
+      # to the release itself, but the installer has to be signed first.
+      - name: Build NSIS installer
+        run: npm run tauri -- build --bundles nsis
+        working-directory: app
+
+      - name: Sign installer and collect release assets
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          # app/src-tauri is a member of the root workspace, so the bundle lands in the root target dir.
+          $target = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory
+          $setup = @(Get-ChildItem "$target\release\bundle\nsis\*-setup.exe")
+          if ($setup.Count -ne 1) { throw "expected one NSIS setup exe in $target\release\bundle\nsis, found $($setup.Count)" }
+          New-Item -ItemType Directory release-assets -Force | Out-Null
+          $exe = "release-assets\Open-X3D-Pro_${env:VERSION}_x64-setup.exe"
+          Copy-Item $setup[0].FullName $exe
+          signtool sign /fd sha256 /td sha256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:PFX_PW $exe
+          $zipped = @('openx3d.inf', 'openx3d.dll', 'openx3d.cat', 'openx3d.cer' | ForEach-Object { "staging/driver/$_" }) +
+            'driver/scripts/install.ps1', 'driver/scripts/uninstall.ps1'
+          Compress-Archive -Path $zipped -DestinationPath "release-assets\openx3d-driver-$env:VERSION.zip"
+          Copy-Item openx3d.cer release-assets/
+          $sums = Get-ChildItem release-assets -File | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+          $sums | Set-Content release-assets\SHA256SUMS.txt
+          $sums
+
+      - name: Write release notes header
+        run: |
+          $fence = '```'
+          $sums = (Get-Content release-assets\SHA256SUMS.txt) -join "`n"
+          $warning = if ($env:SELF_SIGNED -eq 'true') {
+            "> [!WARNING]`n" +
+            "> **Unsigned beta.** This build is signed with a throwaway self-signed certificate, **CN=Open X3D Pro (unsigned beta)**. " +
+            "The installer imports it into the machine's Trusted Root and Trusted Publishers certificate stores so Windows accepts the driver, " +
+            "and the uninstaller removes it again. SmartScreen will warn about the installer (More info, then Run anyway). " +
+            "Only install if you trust this repository.`n"
+          } else { '' }
+          @"
+          Open-source replacement for Logitech Gaming Software for the Logitech Extreme 3D Pro joystick.
+          The driver runs in user mode (UMDF 2, no kernel code), so **Memory Integrity (HVCI) and Secure Boot can stay on**.
+
+          $warning
+          ### Install
+
+          1. Recommended: uninstall Logitech Gaming Software first.
+          2. Download **Open-X3D-Pro_$($env:VERSION)_x64-setup.exe** below and run it (administrator rights needed; it installs the app and the driver).
+          3. Unplug and replug the joystick, or reboot if the installer asks.
+
+          Driver only, without the app: extract **openx3d-driver-$($env:VERSION).zip** and run **install.ps1** from an elevated PowerShell.
+
+          ### SHA-256
+
+          $fence
+          $sums
+          $fence
+          "@ | Set-Content release-notes.md
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: Open X3D Pro ${{ github.ref_name }}
+          body_path: release-notes.md
+          generate_release_notes: true
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          files: release-assets/*

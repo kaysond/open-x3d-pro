@@ -59,8 +59,8 @@ cd driver/test && make                 # host build + run of the C pipeline agai
 Beta builds are signed with a self-signed code-signing certificate, not one issued by a public CA. To let Windows trust the driver catalog, the installer adds that certificate (subject `Open X3D Pro`) to the **machine-wide** `Root` and `TrustedPublisher` certificate stores. This means the machine will trust anything signed with that certificate. The uninstaller removes it; to remove it by hand, run from an elevated prompt:
 
 ```bat
-certutil -delstore Root "Open X3D Pro"
-certutil -delstore TrustedPublisher "Open X3D Pro"
+certutil -delstore Root "Open X3D Pro (unsigned beta)"
+certutil -delstore TrustedPublisher "Open X3D Pro (unsigned beta)"
 ```
 
 ## License
