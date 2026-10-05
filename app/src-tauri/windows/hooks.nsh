@@ -1,6 +1,8 @@
 ; Open X3D Pro installer hooks, included by Tauri's installer.nsi (which already includes
 ; LogicLib and x64.nsh). The installer runs elevated (installMode perMachine).
 ; The NSIS stub is 32-bit: 64-bit-only tools such as pnputil.exe are reached via Sysnative.
+; No certificate store is ever touched: the driver is SignPath Foundation-signed and Windows
+; asks once whether to install device software from that publisher.
 
 !define X3D_DRIVER_DIR "$INSTDIR\resources\driver"
 
@@ -16,21 +18,6 @@
   Push $0
   Push $1
   ${If} ${FileExists} "${X3D_DRIVER_DIR}\openx3d.inf"
-    ; Only nightly (self-signed) builds touch the certificate stores. A CA-issued certificate
-    ; (e.g. SignPath Foundation) is shared by other publishers, so trusting it machine-wide
-    ; would silently admit their drivers too; those builds let Windows show its one-time
-    ; "install this device software?" prompt instead.
-    ${If} ${FileExists} "${X3D_DRIVER_DIR}\self-signed.flag"
-      !insertmacro X3D_SYSTOOL $1 "certutil.exe"
-      DetailPrint "Trusting the nightly self-signed driver certificate"
-      nsExec::ExecToLog '"$1" -addstore -f Root "${X3D_DRIVER_DIR}\openx3d.cer"'
-      Pop $0
-      DetailPrint "certutil -addstore Root: exit code $0"
-      nsExec::ExecToLog '"$1" -addstore -f TrustedPublisher "${X3D_DRIVER_DIR}\openx3d.cer"'
-      Pop $0
-      DetailPrint "certutil -addstore TrustedPublisher: exit code $0"
-    ${EndIf}
-
     !insertmacro X3D_SYSTOOL $1 "pnputil.exe"
     DetailPrint "Installing the Open X3D Pro driver"
     nsExec::ExecToLog '"$1" /add-driver "${X3D_DRIVER_DIR}\openx3d.inf" /install'
@@ -130,28 +117,6 @@
     nsExec::ExecToLog `"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-WindowsDriver -Online | Where-Object { $$_.OriginalFileName -like '*\openx3d.inf' } | ForEach-Object { pnputil /delete-driver $$_.Driver /uninstall; 'pnputil /delete-driver ' + $$_.Driver + ': exit code ' + $$LASTEXITCODE }"`
     Pop $0
     DetailPrint "driver removal via Get-WindowsDriver: exit code $0"
-  ${EndIf}
-
-  ; cert-cn.txt (UTF-16LE, written by CI) holds the signing certificate's CN.
-  StrCpy $2 ""
-  ClearErrors
-  FileOpen $0 "${X3D_DRIVER_DIR}\cert-cn.txt" r
-  ${IfNot} ${Errors}
-    FileReadUTF16LE $0 $2
-    FileClose $0
-  ${EndIf}
-  ; Only remove what the installer added: nightly self-signed certificates. Never run
-  ; certutil -delstore with an empty CN.
-  ${If} $2 != ""
-  ${AndIf} ${FileExists} "${X3D_DRIVER_DIR}\self-signed.flag"
-    !insertmacro X3D_SYSTOOL $1 "certutil.exe"
-    DetailPrint "Removing the nightly self-signed certificate ($2)"
-    nsExec::ExecToLog '"$1" -delstore Root "$2"'
-    Pop $0
-    DetailPrint "certutil -delstore Root: exit code $0"
-    nsExec::ExecToLog '"$1" -delstore TrustedPublisher "$2"'
-    Pop $0
-    DetailPrint "certutil -delstore TrustedPublisher: exit code $0"
   ${EndIf}
   Pop $6
   Pop $5

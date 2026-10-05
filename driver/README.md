@@ -33,7 +33,7 @@ READ_REPORT policy: hidclass keeps a few reads pending per device. On every USB 
 | `pipeline/pipeline.{h,c}` | Pure C11 pipeline and blob validation, shared by the driver and the host test |
 | `test/` | Host test: `make` runs `core/testdata/vectors.json` (falls back to `vectors.sample.json`) and checks that the descriptor copies match |
 | `openx3d/` | UMDF driver: `driver.c` (entry, device add), `device.c` (state, read policy), `usb.c`, `hid.c` (IOCTLs), `registry.c`, `descriptor.h`, `openx3d.inf`, `openx3d.vcxproj`, `openx3d.rc` |
-| `scripts/` | `make-cert.ps1`, `package.ps1`, `install.ps1`, `uninstall.ps1` |
+| `scripts/` | `package.ps1`, `install.ps1`, `uninstall.ps1` |
 
 ## Build
 
@@ -57,27 +57,26 @@ The output is `driver\openx3d\x64\Release\openx3d.dll`. The INF is not part of t
 
 ```powershell
 cd driver\scripts
-.\make-cert.ps1 -OutDir C:\keys -PfxPassword 'pw'          # once; CN=Open X3D Pro (unsigned beta), 5 years
-.\package.ps1 -BuildDir ..\openx3d\x64\Release -OutDir ..\out -PfxPath C:\keys\openx3d.pfx -PfxPassword 'pw'
+.\package.ps1 -BuildDir ..\openx3d\x64\Release -OutDir ..\out                                          # unsigned
+.\package.ps1 -BuildDir ..\openx3d\x64\Release -OutDir ..\out -PfxPath C:\keys\dev.pfx -PfxPassword 'pw'  # your own certificate
 ```
 
 `package.ps1` does the following:
 
-1. Copies `openx3d.inf` and `openx3d.dll` and exports `openx3d.cer` from the PFX.
-2. Signs the DLL.
+1. Copies `openx3d.inf` and `openx3d.dll`.
+2. With `-PfxPath`: signs the DLL.
 3. Runs `Inf2Cat /os:10_VB_X64,10_CO_X64`. This is one OS per decorated models section; the INF has no model for plain `10_X64`.
-4. Signs `openx3d.cat`.
-5. Runs `signtool verify /pa`. Verification warns unless the certificate is already trusted on the build machine.
+4. With `-PfxPath`: signs `openx3d.cat` and runs `signtool verify /pa`, which warns unless the certificate is trusted on the build machine.
 
-Release CI does the same with an ephemeral or secret certificate.
+CI (`.github/workflows/build.yml`, nightlies and releases) runs it without `-PfxPath` and has SignPath Foundation sign `openx3d.dll` and `openx3d.cat`. A locally signed package only installs where you have trusted its certificate yourself; none of these scripts adds certificates to any store.
 
 ## Install, uninstall, rollback
 
-Run from an elevated PowerShell in the folder with `openx3d.inf/.dll/.cat/.cer`. The release zip or the app installer does the same.
+Run from an elevated PowerShell in the folder with `openx3d.inf/.dll/.cat` (the `openx3d-driver-<ver>.zip` of a nightly or release). The app installer does the same. Neither touches certificate stores: the package is signed by SignPath Foundation, and Windows asks once "Would you like to install this device software? Publisher: SignPath Foundation". Click **Install**; leave "Always trust software from SignPath Foundation" unticked unless every driver signed with that shared certificate may install without asking.
 
 ```powershell
-.\install.ps1     # self-signed cert only: certutil -addstore Root + TrustedPublisher; then pnputil /add-driver /install, prints the published oemNN.inf and the binding
-.\uninstall.ps1   # pnputil /delete-driver oemNN.inf /uninstall for every openx3d package (found via Get-WindowsDriver), /scan-devices, removes the certificates
+.\install.ps1     # pnputil /add-driver /install, prints the published oemNN.inf and the binding
+.\uninstall.ps1   # pnputil /delete-driver oemNN.inf /uninstall for every openx3d package (found via Get-WindowsDriver), /scan-devices
 ```
 
 `pnputil /delete-driver` only accepts the published `oemNN.inf` name, never `openx3d.inf`. The app installer records it in `resources\driver\published.txt` at install time; its uninstaller deletes those packages (after checking `%WINDIR%\INF\oemNN.inf` is still openx3d's, since numbers are reused) and falls back to `Get-WindowsDriver` if the file is missing or a deletion fails.
@@ -87,7 +86,7 @@ Rollback means running `uninstall.ps1`. Once the driver package is gone, PnP reb
 ## Go/no-go test (Windows 11 24H2/25H2, Secure Boot ON, Memory Integrity ON, TESTSIGNING off)
 
 1. Check the baseline: `Confirm-SecureBootUEFI` returns True, `(Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard Win32_DeviceGuard).SecurityServicesRunning` contains 2, and `bcdedit` shows no `testsigning`.
-2. Run `.\install.ps1` elevated. Accepting the one-time "install this device software?" prompt is expected for a non-WHQL publisher.
+2. Run `.\install.ps1` elevated. Accepting the one-time "install this device software? Publisher: SignPath Foundation" prompt is expected for a non-WHQL publisher.
 3. Run `pnputil /enum-devices /instanceid "USB\VID_046D&PID_C215\<instance>" /stack /services`. The stack must show **WUDFRd** and **mshidumdf** (service `mshidumdf`) and no `HidUsb`. `install.ps1` prints the same via `DEVPKEY_Device_Stack`.
 4. Check `Get-PnpDevice -PresentOnly | ? InstanceId -like 'HID\VID_046D&PID_C215*'`. It should list `...&Col01` and `...&Col02` with status OK.
 5. Open `joy.cpl` and go to Properties. It should show the stick with X/Y, Z rotation, slider, POV and **32 buttons**, and all axes and buttons should move.
@@ -100,7 +99,7 @@ Debugging: a Debug build logs `openx3d: ...` through `OutputDebugString`; view i
 ## Known limits
 
 - x64 only. ARM64 would need WHQL or attestation signing, because Windows on ARM requires Microsoft-signed drivers.
-- Nightly builds use a self-signed certificate that the installer adds to LocalMachine Root and TrustedPublisher (throwaway key per build). Tagged releases are CA-signed (SignPath Foundation) and add nothing to the stores; Windows prompts once for the publisher.
+- Nightlies and releases are signed by SignPath Foundation (CA-issued, not WHQL), so Windows prompts once for the publisher. Nothing is added to any certificate store.
 - Supported OS: Windows 10 2004–22H2 (build 19041+) and Windows 11. Earlier builds have no matching models section.
 - No output reports and no force feedback (the stick has none). Feature report 4 is GET only.
 - Key bindings (keyboard chords) are emitted by the app, not the driver.

@@ -1,13 +1,14 @@
 name: Build installer
 
-# Shared by nightly.yml and release.yml: signed driver package + signed NSIS installer, uploaded as one artifact.
+# Shared by nightly.yml and release.yml: driver package + NSIS installer signed through SignPath Foundation (each
+# request manually approved; needs SIGNPATH_API_TOKEN + SIGNPATH_ORGANIZATION_ID), uploaded as one artifact.
 on:
   workflow_call:
     inputs:
-      signing:
-        description: "'self-signed' (throwaway certificate made in the job) or 'signpath' (SignPath Foundation, manually approved; needs SIGNPATH_API_TOKEN + SIGNPATH_ORGANIZATION_ID)"
+      signing-policy-slug:
+        description: SignPath signing policy for both requests (release-signing or nightly-signing)
         type: string
-        required: true
+        default: release-signing
       artifact-prefix:
         description: Artifact name; '-<sha7>' is appended
         type: string
@@ -34,45 +35,24 @@ env:
 jobs:
   build:
     runs-on: windows-2022
-    # signpath waits for two manual approvals of up to 2 h each
+    # waits for two manual SignPath approvals of up to 2 h each
     timeout-minutes: 300
     defaults:
       run:
         shell: pwsh
     env:
-      SIGNING: ${{ inputs.signing }}
+      SIGNING_POLICY: ${{ inputs.signing-policy-slug }}
       ARTIFACT_PREFIX: ${{ inputs.artifact-prefix }}
     outputs:
       artifact: ${{ steps.collect.outputs.artifact }}
       version: ${{ steps.setup.outputs.version }}
     steps:
-      - name: Check signing mode
-        if: inputs.signing != 'self-signed' && inputs.signing != 'signpath'
-        run: throw "unknown signing mode '$env:SIGNING'"
-
       - uses: actions/checkout@v7
-
-      - name: Signing certificate
-        if: inputs.signing == 'self-signed'
-        run: |
-          $pfx = "$env:RUNNER_TEMP\openx3d.pfx"
-          $pw = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
-          Write-Output "::add-mask::$pw"
-          & driver/scripts/make-cert.ps1 -OutDir $env:RUNNER_TEMP -PfxPassword $pw
-          # Trusted on the runner only, so signtool verify /pa passes and Tauri leaves the signed driver DLL alone.
-          Import-Certificate -FilePath "$env:RUNNER_TEMP\openx3d.cer" -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
-          $x509 = [Security.Cryptography.X509Certificates.X509Certificate2]::new($pfx, $pw)
-          Write-Output "Signing as $($x509.Subject) ($($x509.Thumbprint))"
-          "PFX_PW=$pw" >> $env:GITHUB_ENV
-          "CERT_THUMBPRINT=$($x509.Thumbprint)" >> $env:GITHUB_ENV
-          "CERT_CN=$($x509.GetNameInfo('SimpleName', $false))" >> $env:GITHUB_ENV
-          "CERT_SUBJECT=$($x509.Subject)" >> $env:GITHUB_ENV
 
       # Values for the ${version} parameter of the SignPath artifact configurations (.github/signpath/):
       # the ProductVersion strings of the setup exe (Tauri: app version) and openx3d.dll (openx3d.rc: a.b.c.0).
       - name: SignPath parameters
         id: signpath
-        if: inputs.signing == 'signpath'
         run: |
           $version = (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           "installer-version=$version" >> $env:GITHUB_OUTPUT
@@ -101,14 +81,12 @@ jobs:
         run: msbuild driver/openx3d/openx3d.vcxproj /p:Configuration=Release /p:Platform=x64 /m
 
       - name: Package driver
+        # Without a PFX package.ps1 only runs Inf2Cat; SignPath signs openx3d.dll and openx3d.cat next.
         run: |
-          # Without a PFX (signpath) package.ps1 still runs Inf2Cat but leaves openx3d.dll and openx3d.cat unsigned.
-          $sign = if ($env:SIGNING -eq 'self-signed') { @{ PfxPath = "$env:RUNNER_TEMP\openx3d.pfx"; PfxPassword = $env:PFX_PW } } else { @{} }
-          & driver/scripts/package.ps1 -BuildDir driver/openx3d/x64/Release -OutDir staging/driver @sign
+          & driver/scripts/package.ps1 -BuildDir driver/openx3d/x64/Release -OutDir staging/driver
 
       - name: Upload unsigned driver for SignPath
         id: unsigned-driver
-        if: inputs.signing == 'signpath'
         uses: actions/upload-artifact@v7
         with:
           name: signpath-driver-unsigned
@@ -120,13 +98,12 @@ jobs:
           overwrite: true
 
       - name: Sign driver with SignPath (waits for manual approval)
-        if: inputs.signing == 'signpath'
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
           project-slug: open-x3d-pro
-          signing-policy-slug: release-signing
+          signing-policy-slug: ${{ inputs.signing-policy-slug }}
           artifact-configuration-slug: driver
           github-artifact-id: ${{ steps.unsigned-driver.outputs.artifact-id }}
           parameters: |
@@ -136,7 +113,6 @@ jobs:
           output-artifact-directory: signed/driver
 
       - name: Verify and stage SignPath-signed driver
-        if: inputs.signing == 'signpath'
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           signtool verify /pa /v signed\driver\openx3d.dll signed\driver\openx3d.cat
@@ -150,43 +126,22 @@ jobs:
             throw 'openx3d.dll and openx3d.cat have different signers'
           }
           Write-Output "Signed by $($cert.Subject) ($($cert.Thumbprint))"
-          [IO.File]::WriteAllBytes((Join-Path $PWD 'staging/driver/openx3d.cer'), $cert.Export('Cert'))
           "CERT_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
-          "CERT_CN=$($cert.GetNameInfo('SimpleName', $false))" >> $env:GITHUB_ENV
           "CERT_SUBJECT=$($cert.Subject)" >> $env:GITHUB_ENV
 
       - name: Stage driver
         run: |
-          # CONTRACT §6: the installer bundles exactly these four from resources/driver/.
-          $files = 'openx3d.inf', 'openx3d.dll', 'openx3d.cat', 'openx3d.cer' | ForEach-Object { "staging/driver/$_" }
+          # CONTRACT §6: the installer bundles exactly these three from resources/driver/.
+          $files = 'openx3d.inf', 'openx3d.dll', 'openx3d.cat' | ForEach-Object { "staging/driver/$_" }
           $missing = $files | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "staging/driver is missing: $($missing -join ', ')" }
-          $res = 'app/src-tauri/resources/driver'
-          Copy-Item $files $res
-          # Read by hooks.nsh: the CN for certutil -delstore on uninstall, and whether to trust the cert as a root.
-          [IO.File]::WriteAllText((Join-Path $PWD "$res/cert-cn.txt"), $env:CERT_CN, [Text.Encoding]::Unicode)
-          if ($env:SIGNING -eq 'self-signed') { New-Item -ItemType File "$res/self-signed.flag" -Force | Out-Null }
+          Copy-Item $files app/src-tauri/resources/driver
 
       - run: npm ci
         working-directory: app
 
-      # Tauri signs the app exe, the uninstaller, its NSIS plugins and the setup exe with signtool /sha1 <thumbprint>
-      # (key in CurrentUser\My), so the PFX password stays out of the config and the generated installer.nsi.
-      - name: Build NSIS installer
-        if: inputs.signing == 'self-signed'
-        working-directory: app
-        run: |
-          @{ bundle = @{ windows = @{
-            certificateThumbprint = $env:CERT_THUMBPRINT
-            digestAlgorithm = 'sha256'
-            timestampUrl = 'http://timestamp.digicert.com'
-            tsp = $true
-          } } } | ConvertTo-Json -Depth 5 | Set-Content "$env:RUNNER_TEMP\tauri-sign.json"
-          npm run tauri -- build --bundles nsis --config "$env:RUNNER_TEMP\tauri-sign.json"
-
       # No signing config: SignPath signs only the setup exe below; the app exe and uninstaller inside stay unsigned (v0.x).
-      - name: Build NSIS installer (unsigned)
-        if: inputs.signing == 'signpath'
+      - name: Build NSIS installer
         working-directory: app
         run: npm run tauri -- build --bundles nsis
 
@@ -205,7 +160,6 @@ jobs:
 
       - name: Upload unsigned installer for SignPath
         id: unsigned-installer
-        if: inputs.signing == 'signpath'
         uses: actions/upload-artifact@v7
         with:
           name: signpath-installer-unsigned
@@ -215,13 +169,12 @@ jobs:
           overwrite: true
 
       - name: Sign installer with SignPath (waits for manual approval)
-        if: inputs.signing == 'signpath'
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
           project-slug: open-x3d-pro
-          signing-policy-slug: release-signing
+          signing-policy-slug: ${{ inputs.signing-policy-slug }}
           artifact-configuration-slug: installer
           github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
           parameters: |
@@ -231,7 +184,6 @@ jobs:
           output-artifact-directory: signed/installer
 
       - name: Verify SignPath-signed installer
-        if: inputs.signing == 'signpath'
         env:
           EXE: Open-X3D-Pro_${{ steps.setup.outputs.version }}_x64-setup.exe
         run: |
@@ -246,19 +198,17 @@ jobs:
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $version = $env:VERSION
-          $exe = "artifacts\Open-X3D-Pro_${version}_x64-setup.exe"
           # Fails the build if the installer or driver is unsigned or a signature does not chain to a trusted root.
-          signtool verify /pa $exe staging\driver\openx3d.dll staging\driver\openx3d.cat
-          $zipped = @('openx3d.inf', 'openx3d.dll', 'openx3d.cat', 'openx3d.cer' | ForEach-Object { "staging/driver/$_" }) +
+          signtool verify /pa "artifacts\Open-X3D-Pro_${version}_x64-setup.exe" staging\driver\openx3d.dll staging\driver\openx3d.cat
+          $zipped = @('openx3d.inf', 'openx3d.dll', 'openx3d.cat' | ForEach-Object { "staging/driver/$_" }) +
             'driver/scripts/install.ps1', 'driver/scripts/uninstall.ps1'
           Compress-Archive -Path $zipped -DestinationPath "artifacts\openx3d-driver-$version.zip"
-          Copy-Item staging/driver/openx3d.cer artifacts/
           @(
             "Open X3D Pro $version"
             "commit: $env:GITHUB_SHA ($env:GITHUB_REF)"
             "built:  $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
             "run:    $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-            "signer: $env:CERT_SUBJECT ($env:CERT_THUMBPRINT, $env:SIGNING)"
+            "signer: $env:CERT_SUBJECT ($env:CERT_THUMBPRINT, SignPath policy $env:SIGNING_POLICY)"
           ) | Set-Content artifacts\BUILD_INFO.txt
           $sums = Get-ChildItem artifacts -File | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
           $sums | Set-Content artifacts\SHA256SUMS.txt

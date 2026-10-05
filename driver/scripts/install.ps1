@@ -1,26 +1,16 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Trusts the beta certificate, installs openx3d.inf and prints the resulting binding.
+  Installs openx3d.inf and prints the resulting binding. Touches no certificate store.
 .PARAMETER Dir
-  Folder holding openx3d.inf/.dll/.cat/.cer (default: this script's folder).
+  Folder holding openx3d.inf/.dll/.cat (default: this script's folder).
 #>
 param([string]$Dir = $PSScriptRoot)
 $ErrorActionPreference = 'Stop'
 
-$cer = Join-Path $Dir 'openx3d.cer'
 $inf = Join-Path $Dir 'openx3d.inf'
-foreach ($f in $cer, $inf, (Join-Path $Dir 'openx3d.cat'), (Join-Path $Dir 'openx3d.dll')) {
+foreach ($f in $inf, (Join-Path $Dir 'openx3d.cat'), (Join-Path $Dir 'openx3d.dll')) {
     if (-not (Test-Path $f)) { throw "missing $f" }
-}
-
-$x509 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $cer
-# Only a self-signed (nightly) certificate goes into the stores; a CA-issued one is shared with
-# other publishers, so Windows' one-time publisher prompt is the right trust boundary.
-$stores = if ($x509.Subject -eq $x509.Issuer) { 'Root', 'TrustedPublisher' } else { @() }
-foreach ($store in $stores) {
-    certutil -addstore -f $store $cer | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "certutil -addstore $store failed ($LASTEXITCODE)" }
 }
 
 pnputil /add-driver $inf /install

@@ -2,10 +2,9 @@
 .SYNOPSIS
   Stages the driver package, builds openx3d.cat and signs it.
 .DESCRIPTION
-  Copies openx3d.dll (from -BuildDir) and openx3d.inf into -OutDir. With
-  -PfxPath it also exports openx3d.cer from the PFX, signs the DLL, runs Inf2Cat,
-  signs the catalog and verifies both. signtool/Inf2Cat come from PATH or the
-  newest Windows Kits\10\bin\<ver>.
+  Copies openx3d.dll (from -BuildDir) and openx3d.inf into -OutDir and runs
+  Inf2Cat. With -PfxPath it also signs the DLL and the catalog and verifies both.
+  signtool/Inf2Cat come from PATH or the newest Windows Kits\10\bin\<ver>.
 .EXAMPLE
   .\package.ps1 -BuildDir ..\openx3d\x64\Release -OutDir ..\out -PfxPath C:\keys\openx3d.pfx -PfxPassword 'pw'
 #>
@@ -44,8 +43,6 @@ $sign = [bool]$PfxPath
 if ($sign) {
     if (-not $PfxPassword) { throw '-PfxPassword is required with -PfxPath' }
     $PfxPath = (Resolve-Path $PfxPath).Path
-    $x509 = [Security.Cryptography.X509Certificates.X509Certificate2]::new($PfxPath, $PfxPassword)
-    [IO.File]::WriteAllBytes((Join-Path $OutDir 'openx3d.cer'), $x509.Export('Cert'))
     $signtool = Find-Tool 'signtool.exe' 'x64'
     $signArgs = @('sign', '/fd', 'sha256', '/td', 'sha256', '/tr', 'http://timestamp.digicert.com', '/f', $PfxPath, '/p', $PfxPassword)
     Invoke-Tool $signtool ($signArgs + (Join-Path $OutDir 'openx3d.dll'))
@@ -61,7 +58,7 @@ if ($sign) {
     foreach ($f in (Join-Path $OutDir 'openx3d.dll'), $cat) {
         & $signtool verify /pa /v $f
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "signtool verify failed for $f. Expected unless the signing root is trusted on this machine (self-signed beta cert)."
+            Write-Warning "signtool verify failed for $f. Expected unless the signing root is trusted on this machine."
         }
     }
 } else {

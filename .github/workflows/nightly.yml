@@ -13,8 +13,29 @@ permissions:
   contents: read
 
 jobs:
+  check:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Require SignPath secrets
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+        run: |
+          $missing = 'SIGNPATH_API_TOKEN', 'SIGNPATH_ORGANIZATION_ID' | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
+          if ($missing) {
+            Write-Output "::error::Nightlies are signed through SignPath (policy nightly-signing), but secret(s) $($missing -join ', ') are not set. Add them under Settings > Secrets and variables > Actions > New repository secret: SIGNPATH_API_TOKEN = API token of the SignPath CI user, SIGNPATH_ORGANIZATION_ID = the SignPath organization ID (shown on the signing policy page). Setup: .github/signpath/README.md."
+            exit 1
+          }
+
   build:
+    needs: check
     uses: ./.github/workflows/build.yml
     with:
-      signing: self-signed
+      signing-policy-slug: nightly-signing
       artifact-prefix: open-x3d-pro-nightly
+    secrets:
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
