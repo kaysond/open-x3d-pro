@@ -58,11 +58,10 @@ export function SettingsPage() {
       </section>
 
       <section className={styles.card}>
-        <h2>About the beta certificate</h2>
+        <h2>Code signing</h2>
         <p className={styles.muted}>
-          Nightly builds are signed with a self-signed certificate. The installer adds it to the machine&apos;s Root and
-          TrustedPublisher stores so Windows accepts the driver, which means this PC trusts anything signed with it. The
-          uninstaller removes it again.
+          Driver and installer are code-signed by SignPath Foundation. The installer never modifies your certificate
+          stores; Windows asks once whether to install device software from that publisher.
         </p>
       </section>
     </div>

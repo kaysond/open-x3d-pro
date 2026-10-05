@@ -1,8 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Removes openx3d from the driver store (the stick falls back to inbox hidusb)
-  and deletes the beta certificate from Root and TrustedPublisher.
+  Removes openx3d from the driver store (the stick falls back to inbox hidusb).
 #>
 $ErrorActionPreference = 'Stop'
 
@@ -18,12 +17,3 @@ foreach ($oem in $published) {
 }
 
 pnputil /scan-devices | Out-Null
-
-foreach ($store in 'Root', 'TrustedPublisher') {
-    Get-ChildItem "Cert:\LocalMachine\$store" |
-        Where-Object Subject -eq 'CN=Open X3D Pro (unsigned beta)' |
-        ForEach-Object {
-            certutil -delstore $store $_.Thumbprint | Out-Null
-            Write-Output "Removed certificate $($_.Thumbprint) from $store"
-        }
-}
