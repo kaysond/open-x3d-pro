@@ -1,6 +1,7 @@
 //! Shared backend state and the IPC payload types of CONTRACT §5.
 
 use crate::calibration::Calibrator;
+use crate::keys::Chords;
 use crate::profiles::ProfileStore;
 use crate::switcher::{ProfileSwitched, Switcher};
 use serde::Serialize;
@@ -41,6 +42,8 @@ pub struct Inner {
     pub switcher: Switcher,
     pub device: DeviceStatus,
     pub calibration: Calibrator,
+    /// Here rather than in the device thread so exit can release held keys.
+    pub chords: Chords,
 }
 
 impl Inner {
@@ -52,6 +55,7 @@ impl Inner {
             switcher: Switcher::default(),
             device: DeviceStatus::default(),
             calibration: Calibrator::default(),
+            chords: Chords::default(),
         }
     }
 
