@@ -27,12 +27,12 @@ mod app {
     use crate::profiles::ProfileStore;
     use crate::state::{Inner, Shared};
     use crate::switcher::ProfileSwitched;
-    use crate::{commands, device, settings, tray, watcher, MINIMIZED_ARG};
-    use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+    use crate::{commands, device, keys, settings, tray, watcher, MINIMIZED_ARG};
+    use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 
     pub fn run() {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-        let result = tauri::Builder::default()
+        let app = tauri::Builder::default()
             // Must be first so a second launch exits before touching anything.
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
                 show_main(app)
@@ -75,9 +75,16 @@ mod app {
                 }
             })
             .setup(|app| setup(app.handle()))
-            .run(tauri::generate_context!());
-        if let Err(e) = result {
-            log::error!("tauri: {e}");
+            .build(tauri::generate_context!());
+        match app {
+            Ok(app) => app.run(|app, event| {
+                // Keys a chord holds down would otherwise stay down in the game after we quit.
+                if let (RunEvent::Exit, Some(shared)) = (event, app.try_state::<Shared>()) {
+                    let events = shared.lock().chords.release_all();
+                    keys::send(&events);
+                }
+            }),
+            Err(e) => log::error!("tauri: {e}"),
         }
     }
 

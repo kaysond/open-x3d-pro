@@ -57,8 +57,8 @@ pub use imp::spawn;
 #[cfg(windows)]
 mod imp {
     use super::{fallback_frame, Coalescer, InputFrame};
-    use crate::keys::{self, Chords};
-    use crate::state::{DeviceStatus, Shared};
+    use crate::keys;
+    use crate::state::{DeviceStatus, Inner, Shared};
     use hidapi::{DeviceInfo, HidApi, HidDevice};
     use std::time::{Duration, Instant};
     use tauri::{AppHandle, Emitter, Manager};
@@ -183,7 +183,6 @@ mod imp {
         let mut processed = JoyReport::default();
         let mut seq = 0u16;
         let mut coalescer = Coalescer::default();
-        let mut chords = Chords::default();
         let mut push_after = Instant::now();
         'session: loop {
             if conn.driver && Instant::now() >= push_after {
@@ -222,11 +221,17 @@ mod imp {
                 raw = RawReport::parse(&bytes);
                 let events = {
                     let mut s = shared.lock();
-                    s.calibration.update(&raw);
+                    let Inner {
+                        calibration,
+                        switcher,
+                        chords,
+                        ..
+                    } = &mut *s;
+                    calibration.update(&raw);
                     if conn.joystick.is_none() {
-                        processed = process(s.switcher.compiled(), &bytes);
+                        processed = process(switcher.compiled(), &bytes);
                     }
-                    chords.update(raw.buttons, s.switcher.key_bindings())
+                    chords.update(raw.buttons, switcher.key_bindings())
                 };
                 if !events.is_empty() {
                     keys::send(&events);
@@ -262,7 +267,8 @@ mod imp {
                 }
             }
         }
-        keys::send(&chords.release_all());
+        let events = shared.lock().chords.release_all();
+        keys::send(&events);
     }
 }
 
