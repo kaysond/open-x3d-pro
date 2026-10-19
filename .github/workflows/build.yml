@@ -29,9 +29,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      # actions/attest-build-provenance
-      id-token: write
-      attestations: write
     defaults:
       run:
         shell: pwsh
@@ -129,11 +126,6 @@ jobs:
           "artifact=${env:ARTIFACT_PREFIX}-$($env:GITHUB_SHA.Substring(0, 7))" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
 
-      # Verify with: gh attestation verify <file> --repo kaysond/open-x3d-pro
-      - uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: artifacts/*
-
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.collect.outputs.artifact }}
@@ -142,3 +134,21 @@ jobs:
           if-no-files-found: error
           # lets "Re-run all jobs" replace the artifact of the earlier attempt
           overwrite: true
+
+  # Separate job so the build's third-party actions, npm scripts and build.rs never hold the OIDC token.
+  attest:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: artifacts
+
+      # Verify with: gh attestation verify <file> --repo kaysond/open-x3d-pro
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: artifacts/*
