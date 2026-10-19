@@ -50,6 +50,7 @@ mod app {
                 commands::set_default_profile,
                 commands::activate_profile,
                 commands::preview_config,
+                commands::end_preview,
                 commands::list_windows,
                 commands::get_settings,
                 commands::save_settings,
@@ -62,6 +63,15 @@ mod app {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
+                    // A hidden window must not keep holding the device on an unsaved preview.
+                    let app = window.app_handle();
+                    let switched = {
+                        let shared = app.state::<Shared>();
+                        let mut s = shared.lock();
+                        s.switcher.clear_preview();
+                        s.reevaluate()
+                    };
+                    notify(app, switched);
                 }
             })
             .setup(|app| setup(app.handle()))

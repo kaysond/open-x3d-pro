@@ -50,3 +50,11 @@ it('debounces previews to the latest config', () => {
   expect(preview.mock.calls[0]?.[0].axes.y.deadzone.center).toBe(0.3);
   vi.useRealTimers();
 });
+
+it('discarding a previewed edit ends the preview without touching the override', () => {
+  const end = vi.spyOn(api, 'endPreview');
+  const activate = vi.spyOn(api, 'activateProfile');
+  useStore.getState().discard();
+  expect(end).toHaveBeenCalledTimes(1);
+  expect(activate).not.toHaveBeenCalled();
+});

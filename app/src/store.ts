@@ -53,8 +53,7 @@ function load(profile: Profile | undefined) {
   clearTimeout(previewTimer);
   if (previewing) {
     previewing = false;
-    const ls = useStore.getState().lastSwitch;
-    void guard(() => api.activateProfile(ls?.reason === 'manual' ? ls.profileId : null));
+    void guard(() => api.endPreview());
   }
   useStore.setState({ draft: profile ? structuredClone(profile) : null, dirty: false });
 }

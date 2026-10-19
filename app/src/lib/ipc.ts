@@ -26,6 +26,7 @@ export interface Commands {
   set_default_profile: [{ id: string }, null];
   activate_profile: [{ id: string | null }, null];
   preview_config: [{ config: DeviceConfig }, null];
+  end_preview: [NoArgs, null];
   list_windows: [NoArgs, WindowInfo[]];
   get_settings: [NoArgs, Settings];
   save_settings: [{ settings: Settings }, Settings];
@@ -65,6 +66,7 @@ export const api = {
   setDefaultProfile: (id: string) => transport.invoke('set_default_profile', { id }),
   activateProfile: (id: string | null) => transport.invoke('activate_profile', { id }),
   previewConfig: (config: DeviceConfig) => transport.invoke('preview_config', { config }),
+  endPreview: () => transport.invoke('end_preview', {}),
   listWindows: () => transport.invoke('list_windows', {}),
   getSettings: () => transport.invoke('get_settings', {}),
   saveSettings: (settings: Settings) => transport.invoke('save_settings', { settings }),
