@@ -83,7 +83,7 @@ pub fn preview_config(
     shared: State<'_, Shared>,
     config: DeviceConfig,
 ) -> Result<(), String> {
-    config.validate().map_err(|e| e.to_string())?;
+    crate::profiles::validate_config(&config).map_err(|e| e.to_string())?;
     mutate(&app, &shared, |s| {
         s.switcher.set_preview(config);
         Ok(())
