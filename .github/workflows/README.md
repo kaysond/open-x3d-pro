@@ -30,7 +30,7 @@ Input `artifact-prefix`; no secrets. A `build` job on windows-2022 (`timeout-min
    - `BUILD_INFO.txt` (commit, ref, build time, run URL)
    - `SHA256SUMS.txt`
 
-Verify a download with `gh attestation verify <file> --repo kaysond/open-x3d-pro`. The installer creates a per-PC driver certificate only if the user ticks the box on its first page (or passes `/TRUSTCERT` to a silent/passive install). See [README: Driver signing](../../README.md#driver-signing).
+Verify a download with `gh attestation verify <file> --repo kaysond/open-x3d-pro --source-ref <refs/tags/vX.Y.Z or refs/heads/main> --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml`; `--repo` alone accepts builds of any branch. The installer creates a per-PC driver certificate only if the user ticks the box on its first page (or passes `/TRUSTCERT` to a silent/passive install). See [README: Driver signing](../../README.md#driver-signing).
 
 The app version is never changed for nightlies (NSIS needs plain semver); the sha in the artifact name and `BUILD_INFO.txt` identify the build.
 
@@ -51,11 +51,11 @@ Artifacts need a signed-in GitHub account.
 
 ## `release.yml` (tag `v*`)
 
-1. `check` (ubuntu-24.04): checks that the tag version matches `tauri.conf.json`, `app/package.json`, root `Cargo.toml`, the INF `DriverVer` and the `openx3d.rc` `ProductVersion` (`a.b.c.0`).
+1. `check` (ubuntu-24.04): checks that the tagged commit is on `main` and that the tag version matches `tauri.conf.json`, `app/package.json`, root `Cargo.toml`, the INF `DriverVer` and the `openx3d.rc` `ProductVersion` (`a.b.c.0`).
 2. `build`: `build.yml`.
-3. `publish` (the only job with `contents: write`): GitHub Release with the artifact's files. `v0.*` tags and tags with a `-suffix` are published as pre-releases.
+3. `publish` (the only job with `contents: write`, in environment `release`): GitHub Release with the artifact's files. `v0.*` tags and tags with a `-suffix` are published as pre-releases.
 
-No repository secrets are needed.
+No repository secrets are needed. Repository settings to set once: required reviewers on the `release` environment, and a tag ruleset that limits who can create `v*` tags.
 
 ## Cutting a release
 
