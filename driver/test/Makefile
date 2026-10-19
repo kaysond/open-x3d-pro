@@ -1,17 +1,12 @@
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror -O2
-REAL := ../../core/testdata/vectors.json
-SAMPLE := vectors.sample.json
+VECTORS := ../../core/testdata/vectors.json
 HID_RS := ../../core/src/hid.rs
 DESC_H := ../openx3d/descriptor.h
 
-.PHONY: test sample check-descriptor clean
+.PHONY: test check-descriptor clean
 
 test: test_pipeline check-descriptor
-	@if [ -f $(REAL) ]; then echo "vectors: $(REAL)"; ./test_pipeline $(REAL); \
-	else echo "vectors: $(REAL) not found, using $(SAMPLE)"; ./test_pipeline $(SAMPLE); fi
-
-sample: test_pipeline
-	./test_pipeline $(SAMPLE)
+	./test_pipeline $(VECTORS)
 
 test_pipeline: test_pipeline.c ../pipeline/pipeline.c ../pipeline/pipeline.h
 	$(CC) $(CFLAGS) -I../pipeline -o $@ test_pipeline.c ../pipeline/pipeline.c
