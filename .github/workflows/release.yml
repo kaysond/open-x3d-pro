@@ -14,17 +14,6 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - name: Require SignPath secrets
-        env:
-          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
-        run: |
-          $missing = 'SIGNPATH_API_TOKEN', 'SIGNPATH_ORGANIZATION_ID' | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
-          if ($missing) {
-            Write-Output "::error::Releases are signed through SignPath, but secret(s) $($missing -join ', ') are not set. Add them under Settings > Secrets and variables > Actions > New repository secret: SIGNPATH_API_TOKEN = API token of the SignPath CI user that submits to release-signing, SIGNPATH_ORGANIZATION_ID = the SignPath organization ID (shown on the signing policy page). Setup: .github/signpath/README.md."
-            exit 1
-          }
-
       - uses: actions/checkout@v7
 
       - name: Check versions match tag
@@ -34,7 +23,6 @@ jobs:
           $inf = Get-Content driver/openx3d/openx3d.inf -Raw
           $rc = Get-Content driver/openx3d/openx3d.rc -Raw
           # @(file, found, expected); DriverVer is numeric a.b.c.d, so compare a.b.c against the tag without any -suffix.
-          # The SignPath driver artifact configuration requires the DLL's ProductVersion string to be exactly a.b.c.0.
           $checks = @(
             @('app/src-tauri/tauri.conf.json version', (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version, $version),
             @('app/package.json version', (Get-Content app/package.json -Raw | ConvertFrom-Json).version, $version),
@@ -53,13 +41,13 @@ jobs:
 
   build:
     needs: check
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/build.yml
     with:
-      signing-policy-slug: release-signing
       artifact-prefix: open-x3d-pro-release
-    secrets:
-      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-      SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
 
   publish:
     needs: build
@@ -88,14 +76,12 @@ jobs:
           ### Install
 
           1. Recommended: uninstall Logitech Gaming Software first.
-          2. Download **Open-X3D-Pro_$($env:VERSION)_x64-setup.exe** below and run it (administrator rights needed; it installs the app and the driver).
+          2. Download **Open-X3D-Pro_$($env:VERSION)_x64-setup.exe** below and run it (administrator rights needed; it installs the app and, if you tick the box, the driver).
           3. Unplug and replug the joystick, or reboot if the installer asks.
 
-          Driver only, without the app: extract **openx3d-driver-$($env:VERSION).zip** and run **install.ps1** from an elevated PowerShell.
+          ### Signing and provenance
 
-          ### Code signing policy
-
-          Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org). Details: [Code signing policy]($($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)#code-signing-policy).
+          The installer is **not code-signed**, so Windows SmartScreen shows "Windows protected your PC": choose **More info**, then **Run anyway**. Check the download instead: every file below has a GitHub build-provenance attestation proving it was built from this repository by GitHub Actions: ``gh attestation verify <file> --repo $($env:GITHUB_REPOSITORY)``. If you tick the box in the installer, the driver is signed on your PC by a certificate created there, whose private key is deleted immediately. Details: [Driver signing]($($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)#driver-signing).
 
           ### SHA-256
 

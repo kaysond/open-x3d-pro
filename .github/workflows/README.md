@@ -3,8 +3,8 @@
 | Workflow | Trigger | Output |
 |---|---|---|
 | `ci.yml` | push to `main`, every PR | static checks + Windows compile, no packaging |
-| `nightly.yml` | push to `main`, manual (`workflow_dispatch`) | installer + driver signed by SignPath Foundation (policy `nightly-signing`, manually approved), as a 14-day workflow artifact |
-| `release.yml` | tag `v*` | the same build signed through policy `release-signing`, published as a GitHub Release |
+| `nightly.yml` | push to `main`, manual (`workflow_dispatch`) | unsigned installer (app + driver) with a build-provenance attestation, as a 14-day workflow artifact |
+| `release.yml` | tag `v*` | the same build, published as a GitHub Release |
 | `build.yml` | `workflow_call` only | the shared Windows build used by `nightly.yml` and `release.yml` |
 
 ## `ci.yml`
@@ -20,26 +20,25 @@
 
 ## `build.yml` (shared by nightly and release)
 
-Input `signing-policy-slug` (`release-signing` by default, `nightly-signing` from `nightly.yml`), optional secrets `SIGNPATH_API_TOKEN` + `SIGNPATH_ORGANIZATION_ID` (each caller checks them first). One job on windows-2022 (`timeout-minutes: 300`) with two round trips through [SignPath](../signpath/README.md), each waiting up to 2 h for manual approval in the SignPath portal:
+Input `artifact-prefix`; no secrets. One job on windows-2022 (`timeout-minutes: 60`, `id-token: write` + `attestations: write` for the attestation). Nothing is code-signed:
 
-1. msbuild the driver; `driver/scripts/package.ps1` without a PFX runs Inf2Cat and leaves the DLL and catalog unsigned. Both are uploaded as artifact `signpath-driver-unsigned` and submitted (configuration `driver`); the signed files come back, `signtool verify /pa /v` checks both and `/c` checks the catalog still covers the DLL.
-2. Stage `openx3d.inf/.dll/.cat` into `app/src-tauri/resources/driver/`, then `npm run tauri -- build --bundles nsis` without signing config. The setup exe is uploaded as `signpath-installer-unsigned` and submitted (configuration `installer`), then verified with `signtool verify /pa /v`. SignPath cannot deep-sign NSIS installers, so the app exe and uninstaller inside stay unsigned in v0.x.
-3. `signtool verify /pa` on the setup exe, DLL and catalog, then upload artifact `<prefix>-<sha7>` (14 days):
+1. msbuild the driver; `driver/scripts/package.ps1` runs Inf2Cat and leaves `openx3d.dll` and `openx3d.cat` unsigned. The installer signs the catalog on the user's PC (`sign-catalog.ps1`).
+2. Stage `openx3d.inf/.dll/.cat` into `app/src-tauri/resources/driver/`, which `hooks.nsh` embeds together with `driver/scripts/sign-catalog.ps1`, then `npm run tauri -- build --bundles nsis`.
+3. Smoke test under Windows PowerShell 5.1: run `sign-catalog.ps1` on a copy of the staged files, `signtool verify /pa` the catalog and `/c` that it covers the DLL, check the certificate is in `Root` + `TrustedPublisher` with EKU code signing only and a critical `CA:FALSE`, that no private key is left, and that `-Remove` deletes it.
+4. `actions/attest-build-provenance` on every file, then upload artifact `<prefix>-<sha7>` (14 days):
    - `Open-X3D-Pro_<ver>_x64-setup.exe`
-   - `openx3d-driver-<ver>.zip` (inf, dll, cat, install.ps1, uninstall.ps1)
-   - `BUILD_INFO.txt` (commit, ref, build time, run URL, signer + policy)
+   - `BUILD_INFO.txt` (commit, ref, build time, run URL)
    - `SHA256SUMS.txt`
 
-Nothing in the build or the installer touches a certificate store; Windows asks the user once whether to install device software from SignPath Foundation.
+Verify a download with `gh attestation verify <file> --repo kaysond/open-x3d-pro`. The installer creates a per-PC driver certificate only if the user ticks the box on its first page (or passes `/TRUSTCERT` to a silent/passive install). See [README: Driver signing](../../README.md#driver-signing).
 
 The app version is never changed for nightlies (NSIS needs plain semver); the sha in the artifact name and `BUILD_INFO.txt` identify the build.
 
 ## `nightly.yml`
 
-1. `check` (ubuntu-24.04): fails immediately unless both SignPath secrets are set (nightlies stay red until SignPath is set up; there is no unsigned build).
-2. `build`: `build.yml` with `signing-policy-slug: nightly-signing`; approve both signing requests in SignPath (2 h limit each) for the nightlies you want, the others time out and fail.
+1. `build`: `build.yml`.
 
-Every push to `main` builds `open-x3d-pro-nightly-<sha7>`. A newer push cancels a running nightly; cancel its pending SignPath request by hand. No tag or GitHub Release is created.
+Every push to `main` builds `open-x3d-pro-nightly-<sha7>`. A newer push cancels a running nightly. No tag or GitHub Release is created.
 
 Manual runs (Actions, Nightly, **Run workflow**) can pick any branch, e.g. to get an installer for a PR branch.
 
@@ -52,25 +51,18 @@ Artifacts need a signed-in GitHub account.
 
 ## `release.yml` (tag `v*`)
 
-1. `check` (ubuntu-24.04): fails immediately unless both SignPath secrets are set, then checks that the tag version matches `tauri.conf.json`, `app/package.json`, root `Cargo.toml`, the INF `DriverVer` and the `openx3d.rc` `ProductVersion` (`a.b.c.0`, enforced by SignPath's metadata restriction).
-2. `build`: `build.yml` with `signing-policy-slug: release-signing`; approve both signing requests in SignPath while it runs.
+1. `check` (ubuntu-24.04): checks that the tag version matches `tauri.conf.json`, `app/package.json`, root `Cargo.toml`, the INF `DriverVer` and the `openx3d.rc` `ProductVersion` (`a.b.c.0`).
+2. `build`: `build.yml`.
 3. `publish` (the only job with `contents: write`): GitHub Release with the artifact's files. `v0.*` tags and tags with a `-suffix` are published as pre-releases.
 
-### Secrets (required for nightlies and releases)
-
-| Secret | Value |
-|---|---|
-| `SIGNPATH_API_TOKEN` | API token of the SignPath CI user that may submit to `release-signing` and `nightly-signing` |
-| `SIGNPATH_ORGANIZATION_ID` | SignPath organization ID (shown on the signing policy page) |
-
-Portal setup (project `open-x3d-pro`, policies `release-signing` and `nightly-signing`, artifact configurations `driver` and `installer`): [`.github/signpath/README.md`](../signpath/README.md). There is no unsigned or self-signed fallback.
+No repository secrets are needed.
 
 ## Cutting a release
 
 1. Bump the version in all five places above, merge to `main`, wait for CI and the nightly.
-2. `git tag v0.1.0 && git push --tags`, then approve the two signing requests in SignPath (2 h limit each).
+2. `git tag v0.1.0 && git push --tags`.
 
 ## Re-running
 
-- Failed run: Actions tab, open the run, cancel pending SignPath requests and use **Re-run all jobs** (see [`.github/signpath/README.md`](../signpath/README.md)).
+- Failed run: Actions tab, open the run, **Re-run all jobs**.
 - Release for an existing tag: re-run the run, or delete the GitHub Release and push the tag again (`git push --delete origin v0.1.0 && git push origin v0.1.0`). Re-running onto an existing release overwrites assets with the same name.
