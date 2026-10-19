@@ -74,8 +74,10 @@ export function CurveEditor({ curve, sensitivity, input, onChange }: CurveEditor
     const last = points.length - 1;
     const lo = (points[drag - 1]?.[0] ?? 0) + MIN_GAP;
     const hi = (points[drag + 1]?.[0] ?? 1) - MIN_GAP;
-    // Endpoints stay pinned at x = 0 and x = 1.
-    const nx = drag === 0 ? 0 : drag === last ? 1 : round3(clamp(x, lo, hi));
+    const own = points[drag]?.[0] ?? x;
+    // Endpoints stay pinned at x = 0 and x = 1; a point squeezed between close neighbours
+    // (possible in imported profiles) keeps its x rather than crossing one.
+    const nx = drag === 0 ? 0 : drag === last ? 1 : lo > hi ? own : round3(clamp(x, lo, hi));
     onChange({
       type: 'points',
       points: points.map((p, i): [number, number] => (i === drag ? [nx, round3(y)] : p)),
