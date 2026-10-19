@@ -41,7 +41,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: microsoft/setup-msbuild@v3
-      - uses: dtolnay/rust-toolchain@stable
+      # Installs the version pinned in rust-toolchain.toml.
+      - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v7
         with:

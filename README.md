@@ -42,7 +42,7 @@ Open-source replacement for Logitech Gaming Software 5.10 for the Logitech Extre
 
 Prerequisites:
 
-- Rust stable (pinned via `rust-toolchain.toml`, with rustfmt and clippy)
+- Rust 1.98.1 (pinned in `rust-toolchain.toml`, with rustfmt and clippy)
 - Node.js 20
 - Windows Driver Kit: only needed to build the driver, which happens in CI on GitHub's Windows runners. Everything else builds and tests on Linux.
 
