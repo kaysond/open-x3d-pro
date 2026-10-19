@@ -21,10 +21,6 @@ pub const RAW_REPORT_LEN: usize = 11;
 pub const CONFIG_REPORT_LEN: usize = 256;
 pub const INFO_REPORT_LEN: usize = 32;
 
-/// `flags` / `state` bits of reports 2 and 4.
-pub const FLAG_FROM_REGISTRY: u8 = 0x01;
-pub const FLAG_IDENTITY: u8 = 0x02;
-
 /// Byte-identical to the driver's descriptor (driver/openx3d). Change both together.
 #[rustfmt::skip]
 pub const REPORT_DESCRIPTOR: &[u8] = &[
@@ -83,12 +79,11 @@ pub const REPORT_DESCRIPTOR: &[u8] = &[
     0xC0,                         // End Collection
 ];
 
-/// Input report 2 from the vendor collection.
+/// Input report 2 from the vendor collection (its trailing flags byte is unused by the app).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VendorInput {
     pub raw: [u8; 7],
     pub seq: u16,
-    pub flags: u8,
 }
 
 impl VendorInput {
@@ -102,19 +97,15 @@ impl VendorInput {
         Some(VendorInput {
             raw,
             seq: u16::from_le_bytes([buf[8], buf[9]]),
-            flags: buf[10],
         })
     }
 }
 
-/// Feature report 4.
+/// Feature report 4, the fields the app uses (CONTRACT §2.1 has the full layout).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DriverInfo {
     pub driver_version_bcd: u16,
-    pub bcd_device: u16,
     pub active_config_crc: u32,
-    pub raw_last: [u8; 7],
-    pub state: u8,
 }
 
 impl DriverInfo {
@@ -123,14 +114,9 @@ impl DriverInfo {
         if buf.len() < 17 || buf[0] != REPORT_ID_INFO {
             return None;
         }
-        let mut raw_last = [0u8; 7];
-        raw_last.copy_from_slice(&buf[9..16]);
         Some(DriverInfo {
             driver_version_bcd: u16::from_le_bytes([buf[1], buf[2]]),
-            bcd_device: u16::from_le_bytes([buf[3], buf[4]]),
             active_config_crc: u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]),
-            raw_last,
-            state: buf[16],
         })
     }
 
@@ -258,18 +244,16 @@ mod tests {
 
         let v =
             VendorInput::parse(&[2, 0xfc, 0xf1, 0x87, 0x80, 0, 0x99, 0, 0x34, 0x12, 3]).unwrap();
-        assert_eq!((v.raw[5], v.seq, v.flags), (0x99, 0x1234, 3));
+        assert_eq!((v.raw[5], v.seq), (0x99, 0x1234));
         assert!(VendorInput::parse(&[1; 11]).is_none());
 
         let mut info = [0u8; INFO_REPORT_LEN];
         info[0] = 4;
         info[1] = 0x10;
         info[5..9].copy_from_slice(&0xDEAD_BEEFu32.to_le_bytes());
-        info[16] = FLAG_IDENTITY;
         let d = DriverInfo::parse(&info).unwrap();
         assert_eq!(d.version_string(), "0.1.0");
         assert_eq!(d.active_config_crc, 0xDEAD_BEEF);
-        assert_eq!(d.state, FLAG_IDENTITY);
 
         let blob = crate::blob::compile(&Default::default());
         let r = config_report(&blob);
