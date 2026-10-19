@@ -60,8 +60,9 @@ export function SettingsPage() {
       <section className={styles.card}>
         <h2>Code signing</h2>
         <p className={styles.muted}>
-          Driver and installer are code-signed by SignPath Foundation. The installer never modifies your certificate
-          stores; Windows asks once whether to install device software from that publisher.
+          The driver was signed on this PC by a certificate the installer created here, only if you ticked its
+          checkbox. Its private key was deleted right after, so nothing else can ever be signed with it. Uninstalling
+          removes the certificate.
         </p>
       </section>
     </div>

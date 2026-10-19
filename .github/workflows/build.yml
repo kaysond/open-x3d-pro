@@ -1,23 +1,14 @@
 name: Build installer
 
-# Shared by nightly.yml and release.yml: driver package + NSIS installer signed through SignPath Foundation (each
-# request manually approved; needs SIGNPATH_API_TOKEN + SIGNPATH_ORGANIZATION_ID), uploaded as one artifact.
+# Shared by nightly.yml and release.yml: unsigned NSIS installer (app + driver package; the installer signs the driver
+# catalog on the user's PC with sign-catalog.ps1), with a GitHub build-provenance attestation, uploaded as one artifact.
 on:
   workflow_call:
     inputs:
-      signing-policy-slug:
-        description: SignPath signing policy for both requests (release-signing or nightly-signing)
-        type: string
-        default: release-signing
       artifact-prefix:
         description: Artifact name; '-<sha7>' is appended
         type: string
         required: true
-    secrets:
-      SIGNPATH_API_TOKEN:
-        required: false
-      SIGNPATH_ORGANIZATION_ID:
-        required: false
     outputs:
       artifact:
         description: Name of the uploaded artifact
@@ -35,28 +26,22 @@ env:
 jobs:
   build:
     runs-on: windows-2022
-    # waits for two manual SignPath approvals of up to 2 h each
-    timeout-minutes: 300
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # actions/attest-build-provenance
+      id-token: write
+      attestations: write
     defaults:
       run:
         shell: pwsh
     env:
-      SIGNING_POLICY: ${{ inputs.signing-policy-slug }}
       ARTIFACT_PREFIX: ${{ inputs.artifact-prefix }}
     outputs:
       artifact: ${{ steps.collect.outputs.artifact }}
-      version: ${{ steps.setup.outputs.version }}
+      version: ${{ steps.collect.outputs.version }}
     steps:
       - uses: actions/checkout@v7
-
-      # Values for the ${version} parameter of the SignPath artifact configurations (.github/signpath/):
-      # the ProductVersion strings of the setup exe (Tauri: app version) and openx3d.dll (openx3d.rc: a.b.c.0).
-      - name: SignPath parameters
-        id: signpath
-        run: |
-          $version = (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          "installer-version=$version" >> $env:GITHUB_OUTPUT
-          "driver-version=$(($version -split '-')[0]).0" >> $env:GITHUB_OUTPUT
 
       - uses: microsoft/setup-msbuild@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -67,6 +52,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
+      # signtool only verifies (smoke test below); nothing in CI signs.
       - name: Put signtool and Inf2Cat on PATH
         run: |
           foreach ($exe in 'x64\signtool.exe', 'x86\Inf2Cat.exe') {
@@ -80,58 +66,11 @@ jobs:
       - name: Build driver (Release x64)
         run: msbuild driver/openx3d/openx3d.vcxproj /p:Configuration=Release /p:Platform=x64 /m
 
-      - name: Package driver
-        # Without a PFX package.ps1 only runs Inf2Cat; SignPath signs openx3d.dll and openx3d.cat next.
+      - name: Package and stage driver
         run: |
+          # No -PfxPath: the catalog stays unsigned until sign-catalog.ps1 runs on the user's PC.
           & driver/scripts/package.ps1 -BuildDir driver/openx3d/x64/Release -OutDir staging/driver
-
-      - name: Upload unsigned driver for SignPath
-        id: unsigned-driver
-        uses: actions/upload-artifact@v7
-        with:
-          name: signpath-driver-unsigned
-          path: |
-            staging/driver/openx3d.dll
-            staging/driver/openx3d.cat
-          retention-days: 1
-          if-no-files-found: error
-          overwrite: true
-
-      - name: Sign driver with SignPath (waits for manual approval)
-        uses: signpath/github-action-submit-signing-request@v3
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: open-x3d-pro
-          signing-policy-slug: ${{ inputs.signing-policy-slug }}
-          artifact-configuration-slug: driver
-          github-artifact-id: ${{ steps.unsigned-driver.outputs.artifact-id }}
-          parameters: |
-            version: ${{ toJSON(steps.signpath.outputs.driver-version) }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 7200
-          output-artifact-directory: signed/driver
-
-      - name: Verify and stage SignPath-signed driver
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          signtool verify /pa /v signed\driver\openx3d.dll signed\driver\openx3d.cat
-          # Inf2Cat hashed the unsigned DLL; Authenticode hashes exclude the signature, so the catalog must still cover it.
-          signtool verify /pa /c signed\driver\openx3d.cat signed\driver\openx3d.dll
-          Copy-Item signed/driver/openx3d.dll, signed/driver/openx3d.cat staging/driver -Force
-          $sig = Get-AuthenticodeSignature staging/driver/openx3d.cat
-          if ($sig.Status -ne 'Valid') { throw "openx3d.cat signature: $($sig.Status) $($sig.StatusMessage)" }
-          $cert = $sig.SignerCertificate
-          if ((Get-AuthenticodeSignature staging/driver/openx3d.dll).SignerCertificate.Thumbprint -ne $cert.Thumbprint) {
-            throw 'openx3d.dll and openx3d.cat have different signers'
-          }
-          Write-Output "Signed by $($cert.Subject) ($($cert.Thumbprint))"
-          "CERT_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
-          "CERT_SUBJECT=$($cert.Subject)" >> $env:GITHUB_ENV
-
-      - name: Stage driver
-        run: |
-          # CONTRACT §6: the installer bundles exactly these three from resources/driver/.
+          # CONTRACT §6: hooks.nsh embeds exactly these three from resources/driver/, plus driver/scripts/sign-catalog.ps1.
           $files = 'openx3d.inf', 'openx3d.dll', 'openx3d.cat' | ForEach-Object { "staging/driver/$_" }
           $missing = $files | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "staging/driver is missing: $($missing -join ', ')" }
@@ -140,15 +79,37 @@ jobs:
       - run: npm ci
         working-directory: app
 
-      # No signing config: SignPath signs only the setup exe below; the app exe and uninstaller inside stay unsigned (v0.x).
       - name: Build NSIS installer
         working-directory: app
         run: npm run tauri -- build --bundles nsis
 
-      - name: Locate installer
-        id: setup
+      # Test on exactly the files the installer ships, under Windows PowerShell 5.1 like the installer.
+      - name: Smoke-test local catalog signing
+        shell: powershell
         run: |
-          $PSNativeCommandUseErrorActionPreference = $true
+          $ErrorActionPreference = 'Stop'
+          $dir = "$env:RUNNER_TEMP\sigtest"
+          Copy-Item app/src-tauri/resources/driver $dir -Recurse
+          Copy-Item driver/scripts/sign-catalog.ps1 $dir
+          & "$dir\sign-catalog.ps1" -Dir $dir
+          $subject = 'CN=Open X3D Pro local driver signing (key destroyed)'
+          signtool verify /pa /v "$dir\openx3d.cat"
+          if ($LASTEXITCODE -ne 0) { throw 'locally signed catalog does not verify' }
+          signtool verify /pa /c "$dir\openx3d.cat" "$dir\openx3d.dll"
+          if ($LASTEXITCODE -ne 0) { throw 'catalog does not cover openx3d.dll' }
+          $trusted = @(Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Where-Object Subject -eq $subject)
+          if ($trusted.Count -ne 2) { throw "expected the certificate in Root and TrustedPublisher, found $($trusted.Count)" }
+          if (Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My | Where-Object Subject -eq $subject) { throw 'private key was not deleted' }
+          $c = $trusted[0]
+          $bc = $c.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.19' }
+          if (-not $bc -or $bc.CertificateAuthority -or -not $bc.Critical) { throw 'certificate is not a critical CA:FALSE end entity' }
+          if (($c.EnhancedKeyUsageList.ObjectId -join ',') -ne '1.3.6.1.5.5.7.3.3') { throw "unexpected EKU: $($c.EnhancedKeyUsageList.ObjectId -join ',')" }
+          & "$dir\sign-catalog.ps1" -Remove
+          if (Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Where-Object Subject -eq $subject) { throw '-Remove left certificates behind' }
+
+      - name: Collect artifact
+        id: collect
+        run: |
           $version = (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           # app/src-tauri is a member of the root workspace, so the bundle lands in the root target dir.
           $target = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory
@@ -156,64 +117,22 @@ jobs:
           if ($setup.Count -ne 1) { throw "expected one NSIS setup exe in $target\release\bundle\nsis, found $($setup.Count)" }
           New-Item -ItemType Directory artifacts -Force | Out-Null
           Copy-Item $setup[0].FullName "artifacts\Open-X3D-Pro_${version}_x64-setup.exe"
-          "version=$version" >> $env:GITHUB_OUTPUT
-
-      - name: Upload unsigned installer for SignPath
-        id: unsigned-installer
-        uses: actions/upload-artifact@v7
-        with:
-          name: signpath-installer-unsigned
-          path: artifacts/Open-X3D-Pro_${{ steps.setup.outputs.version }}_x64-setup.exe
-          retention-days: 1
-          if-no-files-found: error
-          overwrite: true
-
-      - name: Sign installer with SignPath (waits for manual approval)
-        uses: signpath/github-action-submit-signing-request@v3
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: open-x3d-pro
-          signing-policy-slug: ${{ inputs.signing-policy-slug }}
-          artifact-configuration-slug: installer
-          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
-          parameters: |
-            version: ${{ toJSON(steps.signpath.outputs.installer-version) }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 7200
-          output-artifact-directory: signed/installer
-
-      - name: Verify SignPath-signed installer
-        env:
-          EXE: Open-X3D-Pro_${{ steps.setup.outputs.version }}_x64-setup.exe
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          signtool verify /pa /v "signed\installer\$env:EXE"
-          Copy-Item "signed\installer\$env:EXE" artifacts -Force
-
-      - name: Collect artifact
-        id: collect
-        env:
-          VERSION: ${{ steps.setup.outputs.version }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          $version = $env:VERSION
-          # Fails the build if the installer or driver is unsigned or a signature does not chain to a trusted root.
-          signtool verify /pa "artifacts\Open-X3D-Pro_${version}_x64-setup.exe" staging\driver\openx3d.dll staging\driver\openx3d.cat
-          $zipped = @('openx3d.inf', 'openx3d.dll', 'openx3d.cat' | ForEach-Object { "staging/driver/$_" }) +
-            'driver/scripts/install.ps1', 'driver/scripts/uninstall.ps1'
-          Compress-Archive -Path $zipped -DestinationPath "artifacts\openx3d-driver-$version.zip"
           @(
             "Open X3D Pro $version"
             "commit: $env:GITHUB_SHA ($env:GITHUB_REF)"
             "built:  $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
             "run:    $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-            "signer: $env:CERT_SUBJECT ($env:CERT_THUMBPRINT, SignPath policy $env:SIGNING_POLICY)"
           ) | Set-Content artifacts\BUILD_INFO.txt
           $sums = Get-ChildItem artifacts -File | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
           $sums | Set-Content artifacts\SHA256SUMS.txt
           $sums
           "artifact=${env:ARTIFACT_PREFIX}-$($env:GITHUB_SHA.Substring(0, 7))" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      # Verify with: gh attestation verify <file> --repo kaysond/open-x3d-pro
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: artifacts/*
 
       - uses: actions/upload-artifact@v7
         with:

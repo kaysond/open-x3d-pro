@@ -33,7 +33,7 @@ READ_REPORT policy: hidclass keeps a few reads pending per device. On every USB 
 | `pipeline/pipeline.{h,c}` | Pure C11 pipeline and blob validation, shared by the driver and the host test |
 | `test/` | Host test: `make` runs `core/testdata/vectors.json` (falls back to `vectors.sample.json`) and checks that the descriptor copies match |
 | `openx3d/` | UMDF driver: `driver.c` (entry, device add), `device.c` (state, read policy), `usb.c`, `hid.c` (IOCTLs), `registry.c`, `descriptor.h`, `openx3d.inf`, `openx3d.vcxproj`, `openx3d.rc` |
-| `scripts/` | `package.ps1`, `install.ps1`, `uninstall.ps1` |
+| `scripts/` | `package.ps1` (stage + Inf2Cat), `sign-catalog.ps1` (on-PC catalog signing, embedded in and run by the app installer) |
 
 ## Build
 
@@ -68,38 +68,41 @@ cd driver\scripts
 3. Runs `Inf2Cat /os:10_VB_X64,10_CO_X64`. This is one OS per decorated models section; the INF has no model for plain `10_X64`.
 4. With `-PfxPath`: signs `openx3d.cat` and runs `signtool verify /pa`, which warns unless the certificate is trusted on the build machine.
 
-CI (`.github/workflows/build.yml`, nightlies and releases) runs it without `-PfxPath` and has SignPath Foundation sign `openx3d.dll` and `openx3d.cat`. A locally signed package only installs where you have trusted its certificate yourself; none of these scripts adds certificates to any store.
+CI (`.github/workflows/build.yml`, nightlies and releases) runs it without `-PfxPath`: the catalog ships unsigned and `sign-catalog.ps1` signs it on the user's PC with a certificate created there, whose private key it then deletes (see [README: Driver signing](../README.md#driver-signing)). A package signed with your own certificate only installs where you have trusted that certificate yourself.
 
 ## Install, uninstall, rollback
 
-Run from an elevated PowerShell in the folder with `openx3d.inf/.dll/.cat` (the `openx3d-driver-<ver>.zip` of a nightly or release). The app installer does the same. Neither touches certificate stores: the package is signed by SignPath Foundation, and Windows asks once "Would you like to install this device software? Publisher: SignPath Foundation". Click **Install**; leave "Always trust software from SignPath Foundation" unticked unless every driver signed with that shared certificate may install without asking.
+The driver is installed only by the app installer (`app/src-tauri/windows/hooks.nsh`); there is no separate driver package. The installer embeds the package and `sign-catalog.ps1` and extracts them to its own temporary folder, not the install folder. When its certificate checkbox is ticked, it runs `sign-catalog.ps1` (certificate created on this PC, catalog signed, private key deleted, then the certificate added to the machine's `Root` and `TrustedPublisher` stores) and then `pnputil /add-driver openx3d.inf /install`. Uninstalling the app removes the driver and runs `sign-catalog.ps1 -Remove`.
+
+To try a local build by hand, from an elevated PowerShell:
 
 ```powershell
-.\install.ps1     # pnputil /add-driver /install, prints the published oemNN.inf and the binding
-.\uninstall.ps1   # pnputil /delete-driver oemNN.inf /uninstall for every openx3d package (found via Get-WindowsDriver), /scan-devices
+.\package.ps1 -BuildDir ..\openx3d\x64\Release -OutDir ..\out
+.\sign-catalog.ps1 -Dir ..\out
+pnputil /add-driver ..\out\openx3d.inf /install
 ```
 
-`pnputil /delete-driver` only accepts the published `oemNN.inf` name, never `openx3d.inf`. The app installer records it in `resources\driver\published.txt` at install time; its uninstaller deletes those packages (after checking `%WINDIR%\INF\oemNN.inf` is still openx3d's, since numbers are reused) and falls back to `Get-WindowsDriver` if the file is missing or a deletion fails.
+`pnputil /delete-driver` only accepts the published `oemNN.inf` name, never `openx3d.inf`. The app installer records it in `driver-packages.txt` in the install folder at install time; its uninstaller deletes those packages (after checking `%WINDIR%\INF\oemNN.inf` is still openx3d's, since numbers are reused) and falls back to `Get-WindowsDriver` if the file is missing or a deletion fails.
 
-Rollback means running `uninstall.ps1`. Once the driver package is gone, PnP rebinds the stick to inbox `hidusb`/`input.inf` with no reboot. If the device is stuck, unplug and replug it, or run `pnputil /scan-devices`. Device Manager also works: Roll Back Driver, or Uninstall device with "Attempt to remove the driver" ticked.
+Rollback means uninstalling the app (or `pnputil /delete-driver oemNN.inf /uninstall`, then `sign-catalog.ps1 -Remove`). Once the driver package is gone, PnP rebinds the stick to inbox `hidusb`/`input.inf` with no reboot. If the device is stuck, unplug and replug it, or run `pnputil /scan-devices`. Device Manager also works: Roll Back Driver, or Uninstall device with "Attempt to remove the driver" ticked.
 
 ## Go/no-go test (Windows 11 24H2/25H2, Secure Boot ON, Memory Integrity ON, TESTSIGNING off)
 
 1. Check the baseline: `Confirm-SecureBootUEFI` returns True, `(Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard Win32_DeviceGuard).SecurityServicesRunning` contains 2, and `bcdedit` shows no `testsigning`.
-2. Run `.\install.ps1` elevated. Accepting the one-time "install this device software? Publisher: SignPath Foundation" prompt is expected for a non-WHQL publisher.
-3. Run `pnputil /enum-devices /instanceid "USB\VID_046D&PID_C215\<instance>" /stack /services`. The stack must show **WUDFRd** and **mshidumdf** (service `mshidumdf`) and no `HidUsb`. `install.ps1` prints the same via `DEVPKEY_Device_Stack`.
+2. Run the setup exe with the certificate box ticked. No "install this device software?" prompt should appear (the local certificate is in `TrustedPublisher`). This is the decisive check that a catalog signed by a locally created, locally trusted certificate installs with Secure Boot and Memory Integrity on.
+3. Run `pnputil /enum-devices /instanceid "USB\VID_046D&PID_C215\<instance>" /stack /services`. The stack must show **WUDFRd** and **mshidumdf** (service `mshidumdf`) and no `HidUsb`.
 4. Check `Get-PnpDevice -PresentOnly | ? InstanceId -like 'HID\VID_046D&PID_C215*'`. It should list `...&Col01` and `...&Col02` with status OK.
 5. Open `joy.cpl` and go to Properties. It should show the stick with X/Y, Z rotation, slider, POV and **32 buttons**, and all axes and buttons should move.
 6. Read `setupapi.dev.log`: our INF should be selected with rank 0x00FF0000 and no signature error. Event Viewer, Microsoft-Windows-CodeIntegrity/Operational, should have no new 3076/3077/3089 events for `openx3d.dll`, `WUDFRd.sys` or `mshidumdf.sys`.
 7. Push a profile from the app (or `HidD_SetFeature` report 3), unplug, replug, and confirm that feature report 4 `state` bit0 is set (config restored from the registry).
-8. Run `.\uninstall.ps1`. The stick must come back on `HidUsb` and still work in `joy.cpl`.
+8. Uninstall the app. The stick must come back on `HidUsb` and still work in `joy.cpl`, and `Get-ChildItem Cert:\LocalMachine\Root | ? Subject -like '*Open X3D Pro*'` must print nothing.
 
 Debugging: a Debug build logs `openx3d: ...` through `OutputDebugString`; view it with DebugView running as admin with "Capture Global Win32" enabled. Host process crashes show up as WUDFHost events in Event Viewer.
 
 ## Known limits
 
 - x64 only. ARM64 would need WHQL or attestation signing, because Windows on ARM requires Microsoft-signed drivers.
-- Nightlies and releases are signed by SignPath Foundation (CA-issued, not WHQL), so Windows prompts once for the publisher. Nothing is added to any certificate store.
+- The catalog is signed on each PC by a certificate created there (not WHQL), and the installer and app are unsigned, so Smart App Control (when on) blocks them.
 - Supported OS: Windows 10 2004–22H2 (build 19041+) and Windows 11. Earlier builds have no matching models section.
 - No output reports and no force feedback (the stick has none). Feature report 4 is GET only.
 - Key bindings (keyboard chords) are emitted by the app, not the driver.
