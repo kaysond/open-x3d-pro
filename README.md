@@ -127,8 +127,15 @@ The setup exe, the app and the uninstaller are **not code-signed**. A self-signe
 - Every file gets a [GitHub build-provenance attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations) (SLSA provenance, signed through Sigstore with the workflow's OIDC identity). It proves the file was built from a specific commit of `kaysond/open-x3d-pro` by a specific workflow run. Verify it before running the installer:
 
   ```sh
-  gh attestation verify Open-X3D-Pro_0.1.0_x64-setup.exe --repo kaysond/open-x3d-pro
+  # A release: built from that tag by the release workflow
+  gh attestation verify Open-X3D-Pro_0.1.0_x64-setup.exe --repo kaysond/open-x3d-pro \
+    --source-ref refs/tags/v0.1.0 --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml
+  # A nightly: built from main (any branch can be built by hand, so pin the ref)
+  gh attestation verify Open-X3D-Pro_0.1.0_x64-setup.exe --repo kaysond/open-x3d-pro \
+    --source-ref refs/heads/main --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml
   ```
+
+  `--repo` alone accepts any attested build of the repository, including a manual run of a modified workflow on a branch.
 
   Without the GitHub CLI, compare the file's hash (`Get-FileHash` in PowerShell) with `SHA256SUMS.txt` and the release notes, and look the attestation up under the repository's **Attestations** page.
 
