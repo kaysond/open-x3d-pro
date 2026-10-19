@@ -9,6 +9,8 @@ interface Store {
   /** Working copy of the selected profile; Axes/Buttons/Profiles pages edit this. */
   draft: Profile | null;
   dirty: boolean;
+  /** The backend rejected the last previewed draft config; saving it would fail the same way. */
+  previewRejected: boolean;
   frame: InputFrame | null;
   hz: number;
   lastSwitch: ProfileSwitched | null;
@@ -44,7 +46,15 @@ function schedulePreview(config: DeviceConfig) {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
     previewing = true;
-    void guard(() => api.previewConfig(config));
+    void guard(async () => {
+      try {
+        await api.previewConfig(config);
+        useStore.setState({ previewRejected: false });
+      } catch (e) {
+        useStore.setState({ previewRejected: true });
+        throw e;
+      }
+    });
   }, 50);
 }
 
@@ -55,7 +65,7 @@ function load(profile: Profile | undefined) {
     previewing = false;
     void guard(() => api.endPreview());
   }
-  useStore.setState({ draft: profile ? structuredClone(profile) : null, dirty: false });
+  useStore.setState({ draft: profile ? structuredClone(profile) : null, dirty: false, previewRejected: false });
 }
 
 // Saves run one after another, each merging into the result of the last, so quick toggles never revert each other.
@@ -81,6 +91,7 @@ export const useStore = create<Store>()((set, get) => ({
   profiles: [],
   draft: null,
   dirty: false,
+  previewRejected: false,
   frame: null,
   hz: 0,
   lastSwitch: null,

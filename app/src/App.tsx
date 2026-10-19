@@ -45,6 +45,7 @@ export function App() {
   const profiles = useStore((s) => s.profiles);
   const draft = useStore((s) => s.draft);
   const dirty = useStore((s) => s.dirty);
+  const previewRejected = useStore((s) => s.previewRejected);
   const error = useStore((s) => s.error);
   const { select, save, discard } = useStore.getState();
   const Page = PAGES[page][1];
@@ -98,9 +99,13 @@ export function App() {
 
       {dirty && draft && (
         <footer className={styles.saveBar}>
-          <span className={styles.grow}>Unsaved changes to “{draft.name}” — the joystick is previewing them live.</span>
+          <span className={styles.grow}>
+            {previewRejected
+              ? `Unsaved changes to “${draft.name}” are invalid (see the error above); fix them to save.`
+              : `Unsaved changes to “${draft.name}” — the joystick is previewing them live.`}
+          </span>
           <button onClick={discard}>Discard</button>
-          <button className={styles.primary} onClick={() => void save()}>
+          <button className={styles.primary} disabled={previewRejected} onClick={() => void save()}>
             Save
           </button>
         </footer>

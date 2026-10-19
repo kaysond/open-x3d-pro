@@ -72,3 +72,19 @@ it('quick settings saves do not revert each other', async () => {
   await Promise.all([saveSettings({ autostart: false }), saveSettings({ switchingPaused: true })]);
   expect(useStore.getState().appState?.settings).toMatchObject({ autostart: false, switchingPaused: true });
 });
+
+it('flags a draft the backend rejected until it previews cleanly', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(api, 'previewConfig').mockRejectedValueOnce(new Error('deadzones must be within 0..0.5'));
+  useStore.getState().editConfig((c) => {
+    c.axes.x.deadzone.center = 0.6;
+  });
+  await vi.advanceTimersByTimeAsync(50);
+  expect(useStore.getState().previewRejected).toBe(true);
+  useStore.getState().editConfig((c) => {
+    c.axes.x.deadzone.center = 0.1;
+  });
+  await vi.advanceTimersByTimeAsync(50);
+  expect(useStore.getState().previewRejected).toBe(false);
+  vi.useRealTimers();
+});
