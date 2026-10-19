@@ -259,7 +259,8 @@ impl ProfileStore {
     }
 }
 
-fn validate_config(config: &DeviceConfig) -> Result<(), StoreError> {
+/// [`DeviceConfig::validate`] plus key names the injector knows.
+pub fn validate_config(config: &DeviceConfig) -> Result<(), StoreError> {
     config.validate().map_err(|e| StoreError::Invalid(e.0))?;
     for k in config.key_bindings.iter().flat_map(|b| &b.keys) {
         if crate::keys::scan_code(k).is_none() {
