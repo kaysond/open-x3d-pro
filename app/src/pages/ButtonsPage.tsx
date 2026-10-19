@@ -148,7 +148,10 @@ export function ButtonsPage() {
 
         <section className={styles.card}>
           <h2>Key bindings</h2>
-          <p className={styles.muted}>Sent by the app as keystrokes while the physical button is held.</p>
+          <p className={styles.muted}>
+            Sent by the app as keystrokes while the physical button is held. Windows does not deliver them to games
+            running as administrator.
+          </p>
           {config.keyBindings.map((kb, i) => (
             <div key={i} className={styles.row}>
               <Select
