@@ -13,6 +13,10 @@
 !define X3D_DRIVER_DIR "$PLUGINSDIR\driver"
 ; Published oemN.inf names of the installed packages, one per line.
 !define X3D_PUBLISHED "$INSTDIR\driver-packages.txt"
+; HKLM value set while the user's consent stands. Read before Tauri's reinstall page runs the old
+; uninstaller (which clears it), so upgrades keep the driver without asking again.
+!define X3D_REG_KEY "Software\OpenX3DPro"
+!define X3D_REG_CONSENT "TrustDriverCert"
 !define X3D_SIGNING_DOCS "https://github.com/kaysond/open-x3d-pro#driver-signing"
 
 !if /FileExists "${X3D_DRIVER_SRC}\openx3d.inf"
@@ -53,6 +57,10 @@ Var X3DTrustCert
 Page custom X3DCertPage X3DCertPageLeave
 
 Function X3DCertPage
+  ${If} $X3DTrustCert == ""
+    ReadRegStr $0 HKLM "${X3D_REG_KEY}" "${X3D_REG_CONSENT}"
+    ${IfThen} $0 == "1" ${|} StrCpy $X3DTrustCert "1" ${|}
+  ${EndIf}
   ; Passive mode (/P) shows no pages; $PassiveMode is declared after this file, so parse it here.
   ClearErrors
   ${GetOptions} $CMDLINE "/P" $0
@@ -104,7 +112,8 @@ FunctionEnd
   Push $0
   Push $1
   ${If} $X3DTrustCert == ""
-    StrCpy $X3DTrustCert "0"
+    ; Silent install: /TRUSTCERT, or earlier consent if no uninstaller ran (/UPDATE).
+    ReadRegStr $X3DTrustCert HKLM "${X3D_REG_KEY}" "${X3D_REG_CONSENT}"
     ClearErrors
     ${GetOptions} $CMDLINE "/TRUSTCERT" $0
     ${IfNot} ${Errors}
@@ -113,6 +122,7 @@ FunctionEnd
   ${EndIf}
 
   ${If} $X3DTrustCert != "1"
+    DeleteRegValue HKLM "${X3D_REG_KEY}" "${X3D_REG_CONSENT}"
     DetailPrint "Driver certificate not trusted by the user; skipping driver install"
   ${Else}
     !insertmacro X3D_EXTRACT 1
@@ -138,6 +148,7 @@ FunctionEnd
       ${AndIf} $0 != 3010
         MessageBox MB_ICONEXCLAMATION|MB_OK "The Open X3D Pro driver could not be installed (pnputil exit code $0).$\r$\nThe app still works with the stock Windows driver, without curves or remapping in games." /SD IDOK
       ${Else}
+        WriteRegStr HKLM "${X3D_REG_KEY}" "${X3D_REG_CONSENT}" "1"
         ; pnputil /delete-driver only takes published oemN.inf names. Record them now so uninstall
         ; skips the slow lookup. All openx3d packages, since in-place upgrades leave older ones staged.
         ; Get-WindowsDriver is exact and locale-independent, unlike pnputil /enum-drivers text.
@@ -213,6 +224,7 @@ FunctionEnd
     FileClose $4
   ${EndIf}
   Delete "${X3D_PUBLISHED}"
+  DeleteRegKey HKLM "${X3D_REG_KEY}"
 
   !insertmacro X3D_SYSTOOL $1 "WindowsPowerShell\v1.0\powershell.exe"
   ${If} $3 != "ok"
