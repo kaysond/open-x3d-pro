@@ -135,13 +135,14 @@ export const useStore = create<Store>()((set, get) => ({
     const { draft } = get();
     if (!draft) return;
     clearTimeout(previewTimer);
+    // Saving ends the preview on the backend side; a preview sent after this call sets it again.
+    previewing = false;
     await guard(async () => {
       const stored = get().profiles.find((p) => p.id === draft.id);
       const saved = await api.saveProfile({ ...draft, isDefault: stored?.isDefault ?? false });
-      // Saving ends the preview on the backend side.
-      previewing = false;
       set((s) => ({ profiles: s.profiles.map((p) => (p.id === saved.id ? saved : p)) }));
-      load(saved);
+      // Edits made while saving stay in the draft, still dirty.
+      if (get().draft === draft) load(saved);
     });
   },
 

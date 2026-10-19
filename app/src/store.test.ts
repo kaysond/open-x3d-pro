@@ -28,6 +28,14 @@ it('tracks dirty edits and saves them', async () => {
   expect(await savedInvert(id)).toBe(true);
 });
 
+it('keeps edits made while a save is in flight', async () => {
+  const saving = useStore.getState().save();
+  useStore.getState().editProfile({ name: 'Edited during save' });
+  await saving;
+  expect(useStore.getState().draft?.name).toBe('Edited during save');
+  expect(useStore.getState().dirty).toBe(true);
+});
+
 it('discard restores the saved profile', () => {
   useStore.getState().editProfile({ name: 'Renamed' });
   expect(useStore.getState().dirty).toBe(true);
