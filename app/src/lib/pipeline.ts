@@ -88,7 +88,8 @@ export function processFrame(config: DeviceConfig, raw: InputFrame['raw']): Inpu
     if (out !== null && pressed(raw.buttons, i)) buttons |= 1 << (out - 1);
   }
 
-  const h = raw.hat;
+  // 9..15 are not directions; centre them as the Rust pipeline does.
+  const h = raw.hat > 7 ? 8 : raw.hat;
   if (config.hatMode !== 'hat' && h < 8) {
     // Hat 0 = N, clockwise; U,R,D,L -> outputs 13..16, diagonals set two.
     if (h === 7 || h <= 1) buttons |= 1 << 12;

@@ -64,4 +64,12 @@ describe('pipeline', () => {
     expect(out.hat).toBe(8);
     expect(out.buttons).toBe((1 << 12) | (1 << 13) | (1 << 19));
   });
+
+  it('centres a non-direction hat value like the Rust pipeline', () => {
+    const config = defaultDeviceConfig();
+    config.hatMode = 'both';
+    const out = processFrame(config, { x: 512, y: 512, rz: 128, slider: 0, hat: 15, buttons: 0 });
+    expect(out.hat).toBe(8);
+    expect(out.buttons).toBe(0);
+  });
 });
