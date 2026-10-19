@@ -97,6 +97,10 @@ impl Switcher {
         settings: &Settings,
     ) -> Option<ProfileSwitched> {
         let find = |id: &str| profiles.iter().find(|p| p.id == id);
+        // A deleted profile's override must not come back if a profile with its id reappears.
+        if self.manual.as_deref().is_some_and(|id| find(id).is_none()) {
+            self.manual = None;
+        }
         let hold = settings.switching_paused || self.preview.is_some();
         let kept = self
             .active
@@ -290,6 +294,16 @@ mod tests {
         assert_eq!(s.compiled(), &CompiledConfig::from_config(&preview));
         s.clear_preview();
         assert_eq!(s.evaluate(&ps, &settings).unwrap().reason, Reason::Default);
+
+        // Deleting the manual profile drops the override for good.
+        s.set_manual(Some("bare".into()));
+        s.evaluate(&ps, &settings);
+        let without: Vec<Profile> = ps.iter().filter(|p| p.id != "bare").cloned().collect();
+        assert_eq!(
+            s.evaluate(&without, &settings).unwrap().reason,
+            Reason::Default
+        );
+        assert_eq!(s.evaluate(&ps, &settings), None);
     }
 
     #[test]
