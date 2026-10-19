@@ -1,6 +1,6 @@
 // In-memory stand-in for the Tauri backend so the UI runs in a plain browser and in tests.
 import type { AppState, AxisId, DeviceConfig, InputFrame, Profile, Settings } from '../types';
-import { AXES, defaultDeviceConfig, uuid } from '../types';
+import { AXES, defaultDeviceConfig } from '../types';
 import type { Commands, Events, Transport } from './ipc';
 import { processFrame, toRaw16 } from './pipeline';
 
@@ -22,8 +22,8 @@ function dcsConfig(): DeviceConfig {
 
 export function createMockTransport(): Transport {
   let profiles: Profile[] = [
-    { id: uuid(), name: 'Default', exePaths: [], isDefault: true, config: defaultDeviceConfig() },
-    { id: uuid(), name: 'DCS World', exePaths: [DCS_EXE], isDefault: false, config: dcsConfig() },
+    { id: crypto.randomUUID(), name: 'Default', exePaths: [], isDefault: true, config: defaultDeviceConfig() },
+    { id: crypto.randomUUID(), name: 'DCS World', exePaths: [DCS_EXE], isDefault: false, config: dcsConfig() },
   ];
   let settings: Settings = { autostart: true, switchingPaused: false, matchMode: 'foreground' };
   let manual: string | null = null;
@@ -158,7 +158,7 @@ export function createMockTransport(): Transport {
     import_profile: ({ json }) => {
       const p = JSON.parse(json) as Partial<Profile>;
       if (typeof p.name !== 'string' || typeof p.config !== 'object') throw new Error('Not a profile JSON file');
-      const created: Profile = { exePaths: [], ...p, name: p.name, config: p.config, id: uuid(), isDefault: false };
+      const created: Profile = { exePaths: [], ...p, name: p.name, config: p.config, id: crypto.randomUUID(), isDefault: false };
       profiles = [...profiles, created];
       return created;
     },

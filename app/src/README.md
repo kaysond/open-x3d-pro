@@ -31,7 +31,7 @@ Without `window.__TAURI_INTERNALS__` (a plain browser under `npm run dev`, or vi
 ```
 src/
 ├── main.tsx, App.tsx      entry, header/status, tabs, save bar
-├── types.ts               CONTRACT §3/§5 types, defaultDeviceConfig(), uuid()
+├── types.ts               CONTRACT §3/§5 types, defaultDeviceConfig()
 ├── store.ts               zustand: app state, profiles, draft + dirty, live frame, debounced preview_config
 ├── lib/ipc.ts             typed command/event wrappers, transport selection
 ├── lib/mock.ts            mock transport

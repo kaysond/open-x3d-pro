@@ -123,5 +123,3 @@ export function defaultDeviceConfig(): DeviceConfig {
     keyBindings: [],
   };
 }
-
-export const uuid = (): string => crypto.randomUUID();
