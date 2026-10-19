@@ -58,3 +58,9 @@ it('discarding a previewed edit ends the preview without touching the override',
   expect(end).toHaveBeenCalledTimes(1);
   expect(activate).not.toHaveBeenCalled();
 });
+
+it('quick settings saves do not revert each other', async () => {
+  const { saveSettings } = useStore.getState();
+  await Promise.all([saveSettings({ autostart: false }), saveSettings({ switchingPaused: true })]);
+  expect(useStore.getState().appState?.settings).toMatchObject({ autostart: false, switchingPaused: true });
+});

@@ -58,6 +58,9 @@ function load(profile: Profile | undefined) {
   useStore.setState({ draft: profile ? structuredClone(profile) : null, dirty: false });
 }
 
+// Saves run one after another, each merging into the result of the last, so quick toggles never revert each other.
+let settingsQueue: Promise<void> = Promise.resolve();
+
 let rate = { seq: 0, t: 0 };
 function onFrame(frame: InputFrame) {
   const t = performance.now();
@@ -194,12 +197,15 @@ export const useStore = create<Store>()((set, get) => ({
     });
   },
 
-  saveSettings: async (patch) => {
-    const { appState } = get();
-    if (!appState) return;
-    await guard(async () => {
-      const settings = await api.saveSettings({ ...appState.settings, ...patch });
-      set((s) => ({ appState: s.appState && { ...s.appState, settings } }));
-    });
+  saveSettings: (patch) => {
+    settingsQueue = settingsQueue.then(() =>
+      guard(async () => {
+        const { appState } = get();
+        if (!appState) return;
+        const settings = await api.saveSettings({ ...appState.settings, ...patch });
+        set((s) => ({ appState: s.appState && { ...s.appState, settings } }));
+      }),
+    );
+    return settingsQueue;
   },
 }));
