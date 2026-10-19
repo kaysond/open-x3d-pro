@@ -22,7 +22,7 @@ The driver publishes its own report descriptor (`openx3d/descriptor.h`, kept byt
 
 Games see one joystick with the real VID/PID. LGS's `WmFilter` matched `HID\VID_046D&PID_C215` and does not match the `&ColNN` IDs.
 
-The app sends a profile with `HidD_SetFeature(report 3)`. The driver validates it (magic, version, size, CRC32), applies it atomically, and stores it as `REG_BINARY Config` in its subkey of the device hardware key. On the next start the driver reloads it, or falls back to identity if it is missing or invalid.
+The app sends a profile with `HidD_SetFeature(report 3)`. The driver validates it (magic, version, size, CRC32, and every field in range), applies it atomically, and stores it as `REG_BINARY Config` in its subkey of the device hardware key. On the next start the driver reloads it, or falls back to identity if it is missing or invalid.
 
 READ_REPORT policy: hidclass keeps a few reads pending per device. On every USB frame the driver completes up to two of them, first with report 1 and then with report 2. If only one read is pending it gets report 1, unless report 2 has gone unsent for 100 ms. See `DeviceCompletePendingReads` in `openx3d/device.c`.
 

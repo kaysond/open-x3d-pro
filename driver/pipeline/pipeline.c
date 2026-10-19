@@ -22,14 +22,40 @@ static uint32_t blob_crc(const X3D_CONFIG *cfg)
     return pipeline_crc32((const uint8_t *)cfg + 12, sizeof(X3D_CONFIG) - 12);
 }
 
+static bool axis_valid(const X3D_AXIS_CONFIG *a)
+{
+    unsigned c = a->dz_center, lo = a->dz_min, hi = a->dz_max;
+    if (a->invert > 1 || (a->target > X3D_AXIS_SLIDER && a->target != X3D_TARGET_NONE))
+        return false;
+    if (a->mode == X3D_MODE_SYMMETRIC) {
+        if (!(a->cal_min < a->cal_center && a->cal_center < a->cal_max))
+            return false;
+    } else if (a->mode != X3D_MODE_FULL || a->cal_min >= a->cal_max) {
+        return false;
+    }
+    return c <= 500 && lo <= 500 && hi <= 500 && c + lo < 1000 && c + hi < 1000 && lo + hi < 1000;
+}
+
 bool pipeline_validate(const uint8_t *blob, size_t len)
 {
     X3D_CONFIG cfg;
     if (blob == NULL || len < sizeof(X3D_CONFIG))
         return false;
     memcpy(&cfg, blob, sizeof(cfg));
-    return cfg.magic == X3D_CONFIG_MAGIC && cfg.version == X3D_CONFIG_VERSION &&
-           cfg.size == X3D_CONFIG_SIZE && cfg.crc32 == blob_crc(&cfg);
+    if (cfg.magic != X3D_CONFIG_MAGIC || cfg.version != X3D_CONFIG_VERSION ||
+        cfg.size != X3D_CONFIG_SIZE || cfg.crc32 != blob_crc(&cfg))
+        return false;
+    for (int i = 0; i < 4; i++) {
+        if (!axis_valid(&cfg.axes[i]))
+            return false;
+    }
+    if (cfg.hat_mode > X3D_HAT_MODE_BOTH || cfg.shift_button > 12)
+        return false;
+    for (int i = 0; i < 12; i++) {
+        if (cfg.button_map[i] > 32 || cfg.button_map_shift[i] > 32)
+            return false;
+    }
+    return true;
 }
 
 void pipeline_identity(X3D_CONFIG *out)
