@@ -2,7 +2,7 @@
 
 use std::fmt;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use x3d_core::config::{DeviceConfig, Profile};
 
@@ -60,11 +60,14 @@ fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
-/// Write-then-rename so a crash never leaves a truncated file.
+/// Write, flush to disk, then rename, so neither a crash nor a power loss leaves a truncated file.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
-    fs::write(&tmp, bytes)?;
+    let mut f = fs::File::create(&tmp)?;
+    f.write_all(bytes)?;
+    f.sync_all()?;
+    drop(f);
     fs::rename(&tmp, path)
 }
 
