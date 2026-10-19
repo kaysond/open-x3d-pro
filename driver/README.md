@@ -53,22 +53,14 @@ infverif /v /h driver\openx3d\openx3d.inf
 
 The output is `driver\openx3d\x64\Release\openx3d.dll`. The INF is not part of the project, so the build does not run StampInf/InfVerif. Validate it with `/h`. `/w` will flag the Windows 10 section (inbox `ServiceBinary=%12%`, AddReg `LowerFilters`), which cannot be avoided before build 22000 (no `MsHidUmdf.inf`). `/w /wbuild 10.0.22000` is the `/w` equivalent.
 
-## Package and sign
+## Package
 
 ```powershell
 cd driver\scripts
-.\package.ps1 -BuildDir ..\openx3d\x64\Release -OutDir ..\out                                          # unsigned
-.\package.ps1 -BuildDir ..\openx3d\x64\Release -OutDir ..\out -PfxPath C:\keys\dev.pfx -PfxPassword 'pw'  # your own certificate
+.\package.ps1 -BuildDir ..\openx3d\x64\Release -OutDir ..\out
 ```
 
-`package.ps1` does the following:
-
-1. Copies `openx3d.inf` and `openx3d.dll`.
-2. With `-PfxPath`: signs the DLL.
-3. Runs `Inf2Cat /os:10_VB_X64,10_CO_X64`. This is one OS per decorated models section; the INF has no model for plain `10_X64`.
-4. With `-PfxPath`: signs `openx3d.cat` and runs `signtool verify /pa`, which warns unless the certificate is trusted on the build machine.
-
-CI (`.github/workflows/build.yml`, nightlies and releases) runs it without `-PfxPath`: the catalog ships unsigned and `sign-catalog.ps1` signs it on the user's PC with a certificate created there, whose private key it then deletes (see [README: Driver signing](../README.md#driver-signing)). A package signed with your own certificate only installs where you have trusted that certificate yourself.
+`package.ps1` copies `openx3d.inf` and `openx3d.dll` and runs `Inf2Cat /os:10_VB_X64,10_CO_X64` (one OS per decorated models section; the INF has no model for plain `10_X64`). Nothing is signed: the catalog is signed only on the PC it is installed on, by `sign-catalog.ps1` with a certificate created there, whose private key it then deletes (see [README: Driver signing](../README.md#driver-signing)). CI (`.github/workflows/build.yml`, nightlies and releases) runs the same script.
 
 ## Install, uninstall, rollback
 

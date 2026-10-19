@@ -65,7 +65,7 @@ jobs:
 
       - name: Package and stage driver
         run: |
-          # No -PfxPath: the catalog stays unsigned until sign-catalog.ps1 runs on the user's PC.
+          # The catalog stays unsigned until sign-catalog.ps1 runs on the user's PC.
           & driver/scripts/package.ps1 -BuildDir driver/openx3d/x64/Release -OutDir staging/driver
           # CONTRACT §6: hooks.nsh embeds exactly these three from resources/driver/, plus driver/scripts/sign-catalog.ps1.
           $files = 'openx3d.inf', 'openx3d.dll', 'openx3d.cat' | ForEach-Object { "staging/driver/$_" }
