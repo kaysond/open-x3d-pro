@@ -60,9 +60,9 @@ export function SettingsPage() {
       <section className={styles.card}>
         <h2>Code signing</h2>
         <p className={styles.muted}>
-          The driver was signed on this PC by a certificate the installer created here, only if you ticked its
-          checkbox. Its private key was deleted right after, so nothing else can ever be signed with it. Uninstalling
-          removes the certificate.
+          {appState.driverInstalled
+            ? 'The driver was signed on this PC by a certificate the installer created here. Its private key was deleted before the certificate was trusted, so nothing else can ever be signed with it. Uninstalling removes the certificate.'
+            : 'The driver is not installed, so no certificate was created. Run the installer again and tick its certificate checkbox to install the driver.'}
         </p>
       </section>
     </div>
