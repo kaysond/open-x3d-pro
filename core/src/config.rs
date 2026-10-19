@@ -1,7 +1,6 @@
 //! Profile and device configuration types (CONTRACT §3), shared with the frontend as JSON.
 
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -220,33 +219,30 @@ impl Default for DeviceConfig {
 }
 
 impl DeviceConfig {
-    pub fn validate(&self) -> Result<(), ConfigError> {
+    pub fn validate(&self) -> Result<(), String> {
         for (id, axis) in AxisId::ALL.iter().zip(self.axes.all()) {
             axis.validate()
-                .map_err(|e| ConfigError(format!("axis {}: {e}", id.as_str())))?;
+                .map_err(|e| format!("axis {}: {e}", id.as_str()))?;
         }
         let physical = 1..=PHYSICAL_BUTTONS as u8;
         for (i, b) in self.buttons.iter().chain(&self.buttons_shifted).enumerate() {
             if b.output.is_some_and(|o| !(1..=32).contains(&o)) {
                 let layer = if i < PHYSICAL_BUTTONS { "" } else { "shifted " };
-                return Err(ConfigError(format!(
+                return Err(format!(
                     "{layer}button {}: output must be 1..32",
                     i % PHYSICAL_BUTTONS + 1
-                )));
+                ));
             }
         }
         if self.shift_button.is_some_and(|b| !physical.contains(&b)) {
-            return Err(ConfigError("shift button must be 1..12".into()));
+            return Err("shift button must be 1..12".into());
         }
         for k in &self.key_bindings {
             if !physical.contains(&k.button) {
-                return Err(ConfigError("key binding button must be 1..12".into()));
+                return Err("key binding button must be 1..12".into());
             }
             if k.keys.is_empty() {
-                return Err(ConfigError(format!(
-                    "key binding for button {} has no keys",
-                    k.button
-                )));
+                return Err(format!("key binding for button {} has no keys", k.button));
             }
         }
         Ok(())
@@ -288,17 +284,6 @@ impl Default for Settings {
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfigError(pub String);
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for ConfigError {}
 
 #[cfg(test)]
 mod tests {
@@ -352,7 +337,7 @@ mod tests {
     fn invalid(f: impl FnOnce(&mut DeviceConfig)) -> String {
         let mut c = DeviceConfig::default();
         f(&mut c);
-        c.validate().unwrap_err().0
+        c.validate().unwrap_err()
     }
 
     #[test]
