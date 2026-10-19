@@ -84,7 +84,9 @@ impl Inner {
     }
 }
 
-/// The one lock all threads share; held only for short, non-blocking sections.
+/// The one lock all threads share; held only for short sections.
+// ponytail: profile store writes (save, set_default rewriting every file) still happen under it and
+// can delay a report by a few ms; split the store into its own lock if that ever shows up.
 #[derive(Clone)]
 pub struct Shared(Arc<Mutex<Inner>>);
 

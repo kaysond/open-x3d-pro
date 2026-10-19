@@ -144,15 +144,17 @@ mod app {
     }
 
     pub(crate) fn toggle_pause(app: &AppHandle) {
-        let switched = {
-            let shared = app.state::<Shared>();
+        let shared = app.state::<Shared>();
+        let (path, saved) = {
             let mut s = shared.lock();
             s.settings.switching_paused = !s.settings.switching_paused;
-            if let Err(e) = settings::save(&s.settings_path, &s.settings) {
-                log::warn!("cannot save settings: {e}");
-            }
-            s.reevaluate()
+            (s.settings_path.clone(), s.settings.clone())
         };
+        // Outside the lock: the device thread takes it on every report.
+        if let Err(e) = settings::save(&path, &saved) {
+            log::warn!("cannot save settings: {e}");
+        }
+        let switched = shared.lock().reevaluate();
         notify(app, switched);
     }
 
