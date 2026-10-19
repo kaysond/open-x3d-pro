@@ -184,13 +184,19 @@ mod imp {
         let mut seq = 0u16;
         let mut coalescer = Coalescer::default();
         let mut chords = Chords::default();
+        let mut push_after = Instant::now();
         'session: loop {
-            if conn.driver {
+            if conn.driver && Instant::now() >= push_after {
                 let blob = shared.lock().switcher.take_push();
                 if let Some(blob) = blob {
                     match conn.input.send_feature_report(&config_report(&blob)) {
                         Ok(()) => log::debug!("config pushed"),
-                        Err(e) => log::warn!("config push failed: {e}"),
+                        Err(e) => {
+                            log::warn!("config push failed, retrying in 1 s: {e}");
+                            // The device keeps its old config; forget the CRC so take_push resends.
+                            shared.lock().switcher.set_device_crc(None);
+                            push_after = Instant::now() + Duration::from_secs(1);
+                        }
                     }
                 }
             }
