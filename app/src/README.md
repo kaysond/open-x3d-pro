@@ -41,4 +41,4 @@ src/
 └── styles/                global.css (theme), ui.module.css
 ```
 
-Edits on the Axes/Buttons/Profiles pages change a working copy of the selected profile. Config edits are pushed with `preview_config` after 50 ms, Save persists with `save_profile`, and Discard ends the preview with `activate_profile`.
+Edits on the Axes/Buttons/Profiles pages change a working copy of the selected profile. Config edits are pushed with `preview_config` after 50 ms, Save persists with `save_profile` (Save is disabled while the backend rejects the draft), and Discard or selecting another profile ends the preview with `end_preview`. Closing the window ends it too.
