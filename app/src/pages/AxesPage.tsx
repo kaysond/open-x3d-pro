@@ -78,6 +78,9 @@ export function AxesPage() {
     guard(async () => {
       setCalibrating(null);
       const cal = await api.finishCalibration(axis);
+      if (symmetric && !(cal.min < cal.center && cal.center < cal.max)) {
+        throw new Error('the axis was not centred when Finish was clicked; calibrate again and let it return to centre');
+      }
       edit((a) => {
         a.calibration = cal;
       });
