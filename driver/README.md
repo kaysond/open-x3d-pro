@@ -106,3 +106,4 @@ Debugging: a Debug build logs `openx3d: ...` through `OutputDebugString`; view i
 - Supported OS: Windows 10 2004–22H2 (build 19041+) and Windows 11. Earlier builds have no matching models section.
 - No output reports and no force feedback (the stick has none). Feature report 4 is GET only.
 - Key bindings (keyboard chords) are emitted by the app, not the driver.
+- Any local user, elevated or not, can open the vendor collection (Col02) under the default HID ACL and push a config, which is stored in the device's hardware key and so applies to every user and survives reboots. This is accepted: the blob is fully validated, and the worst case is a remapped joystick. The driver cannot tell callers apart, since requests arrive through hidclass; restricting it would need a device-interface ACL on Col02.
