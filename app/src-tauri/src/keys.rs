@@ -135,7 +135,8 @@ pub struct KeyEvent {
     pub down: bool,
 }
 
-/// Turns physical button edges into key presses/releases.
+/// Turns physical button edges into key presses/releases. A key shared by two held chords
+/// goes down with the first and up with the last.
 #[derive(Debug, Default)]
 pub struct Chords {
     prev: u16,
@@ -148,24 +149,34 @@ impl Chords {
         let changed = buttons ^ self.prev;
         self.prev = buttons;
         let mut out = Vec::new();
-        for (i, held) in self.held.iter_mut().enumerate() {
+        for i in 0..PHYSICAL_BUTTONS {
             if changed & (1 << i) == 0 {
                 continue;
             }
-            if buttons & (1 << i) != 0 {
-                *held = bindings
+            let pressed = buttons & (1 << i) != 0;
+            let keys: Vec<u16> = if pressed {
+                bindings
                     .iter()
                     .filter(|b| usize::from(b.button) == i + 1)
                     .flat_map(|b| &b.keys)
                     .filter_map(|k| scan_code(k))
-                    .collect();
-                out.extend(held.iter().map(|&scan| KeyEvent { scan, down: true }));
+                    .collect()
             } else {
-                out.extend(
-                    held.drain(..)
-                        .rev()
-                        .map(|scan| KeyEvent { scan, down: false }),
-                );
+                std::mem::take(&mut self.held[i])
+                    .into_iter()
+                    .rev()
+                    .collect()
+            };
+            for &scan in &keys {
+                if !self.held.iter().any(|h| h.contains(&scan)) {
+                    out.push(KeyEvent {
+                        scan,
+                        down: pressed,
+                    });
+                }
+            }
+            if pressed {
+                self.held[i] = keys;
             }
         }
         out
@@ -309,5 +320,26 @@ mod tests {
         assert_eq!(c.update(0b01, &[]), vec![up(0x21), up(0x1D)]);
         c.update(0b10, &bindings);
         assert_eq!(c.release_all(), vec![up(0x21), up(0x1D)]);
+    }
+
+    #[test]
+    fn shared_key_stays_down_until_last_chord_releases() {
+        let bindings = vec![
+            KeyBinding {
+                button: 1,
+                keys: vec!["ShiftLeft".into()],
+            },
+            KeyBinding {
+                button: 2,
+                keys: vec!["ShiftLeft".into(), "KeyF".into()],
+            },
+        ];
+        let mut c = Chords::default();
+        let down = |scan| KeyEvent { scan, down: true };
+        let up = |scan| KeyEvent { scan, down: false };
+        assert_eq!(c.update(0b01, &bindings), vec![down(0x2A)]);
+        assert_eq!(c.update(0b11, &bindings), vec![down(0x21)]);
+        assert_eq!(c.update(0b10, &bindings), vec![]);
+        assert_eq!(c.update(0b00, &bindings), vec![up(0x21), up(0x2A)]);
     }
 }
