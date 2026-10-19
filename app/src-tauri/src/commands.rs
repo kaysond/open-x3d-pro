@@ -125,7 +125,15 @@ pub fn save_settings(
         crate::apply_autostart(&app, settings.autostart)?;
     }
     // Outside the lock: the device thread takes it on every report.
-    crate::settings::save(&path, &settings).map_err(|e| format!("cannot save settings: {e}"))?;
+    if let Err(e) = crate::settings::save(&path, &settings) {
+        // Put the Run key back so it matches the settings file that stays.
+        if autostart_changed {
+            if let Err(e) = crate::apply_autostart(&app, !settings.autostart) {
+                log::warn!("{e}");
+            }
+        }
+        return Err(format!("cannot save settings: {e}"));
+    }
     mutate(&app, &shared, |s| {
         s.settings = settings.clone();
         Ok(settings)
