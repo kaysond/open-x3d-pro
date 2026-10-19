@@ -60,6 +60,7 @@ mod imp {
     use crate::keys;
     use crate::state::{DeviceStatus, Inner, Shared};
     use hidapi::{DeviceInfo, HidApi, HidDevice};
+    use std::sync::{Mutex, PoisonError};
     use std::time::{Duration, Instant};
     use tauri::{AppHandle, Emitter, Manager};
     use x3d_core::hid::{
@@ -88,11 +89,13 @@ mod imp {
     }
 
     fn run(app: &AppHandle) {
-        let mut api = match HidApi::new() {
-            Ok(api) => api,
-            Err(e) => {
-                log::error!("HID init failed: {e}");
-                return;
+        let mut api = loop {
+            match HidApi::new() {
+                Ok(api) => break api,
+                Err(e) => {
+                    log::error!("HID init failed, retrying in 5 s: {e}");
+                    std::thread::sleep(Duration::from_secs(5));
+                }
             }
         };
         loop {
@@ -120,7 +123,19 @@ mod imp {
         };
         let open = |info: &DeviceInfo| {
             info.open_device(api)
-                .map_err(|e| log::warn!("cannot open {:?}: {e}", info.path()))
+                .map_err(|e| {
+                    // run() retries every second; warn once a minute, the rest at debug.
+                    static LAST_WARN: Mutex<Option<Instant>> = Mutex::new(None);
+                    let mut last = LAST_WARN.lock().unwrap_or_else(PoisonError::into_inner);
+                    let now = Instant::now();
+                    let level = if last.is_none_or(|t| now - t >= Duration::from_secs(60)) {
+                        *last = Some(now);
+                        log::Level::Warn
+                    } else {
+                        log::Level::Debug
+                    };
+                    log::log!(level, "cannot open {:?}: {e}", info.path());
+                })
                 .ok()
         };
         let joystick = find(USAGE_PAGE_GENERIC_DESKTOP, USAGE_JOYSTICK).and_then(open);
