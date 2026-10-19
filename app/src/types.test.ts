@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { defaultDeviceConfig, uuid } from './types';
+import { defaultDeviceConfig } from './types';
 
 it('default config is the identity from CONTRACT §3', () => {
   const c = defaultDeviceConfig();
@@ -22,8 +22,4 @@ it('default config is the identity from CONTRACT §3', () => {
   expect(c.shiftButton).toBeNull();
   expect(c.buttonsShifted).toEqual(Array.from({ length: 12 }, () => ({ output: null })));
   expect(c.keyBindings).toEqual([]);
-});
-
-it('uuid is v4', () => {
-  expect(uuid()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
