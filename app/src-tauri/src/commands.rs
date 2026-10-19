@@ -91,6 +91,14 @@ pub fn preview_config(
 }
 
 #[tauri::command]
+pub fn end_preview(app: AppHandle, shared: State<'_, Shared>) -> Result<(), String> {
+    mutate(&app, &shared, |s| {
+        s.switcher.clear_preview();
+        Ok(())
+    })
+}
+
+#[tauri::command]
 pub fn list_windows() -> Result<Vec<WindowInfo>, String> {
     Ok(crate::watcher::list_windows())
 }

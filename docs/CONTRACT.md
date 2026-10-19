@@ -166,7 +166,8 @@ All commands return `Result<T, String>`; errors are human-readable. Payloads are
 | `delete_profile` | `id: string` | `void` (refuses to delete the default) |
 | `set_default_profile` | `id: string` | `void` |
 | `activate_profile` | `id: string \| null` | `void` — manual override; null returns to automatic switching; either form also ends a `preview_config` preview |
-| `preview_config` | `config: DeviceConfig` | `void` — push to driver immediately without saving (live editing); automatic switching suppressed until `activate_profile(null)` or profile saved |
+| `preview_config` | `config: DeviceConfig` | `void` — push to driver immediately without saving (live editing); automatic switching suppressed until `end_preview`, `activate_profile`, profile saved, or the window is closed (hidden to the tray) |
+| `end_preview` | — | `void` — drops the preview; the active profile's config goes back to the driver, manual override kept |
 | `list_windows` | — | `WindowInfo[] { pid: number; exePath: string; title: string }` (visible top-level windows, for "add running app") |
 | `get_settings` / `save_settings` | — / `settings: Settings` | `Settings` |
 | `start_calibration` / `finish_calibration` | `axis: AxisId` / `axis: AxisId` | `void` / `Calibration` (backend tracks min/max while running, center = value at finish) |

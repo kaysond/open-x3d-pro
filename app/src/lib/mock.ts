@@ -123,6 +123,10 @@ export function createMockTransport(): Transport {
       preview = config;
       return null;
     },
+    end_preview: () => {
+      preview = null;
+      return null;
+    },
     list_windows: () => [
       { pid: 4242, exePath: DCS_EXE, title: 'Digital Combat Simulator' },
       {
