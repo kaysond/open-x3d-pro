@@ -70,7 +70,8 @@ typedef char x3d_joy_report_is_14_bytes[sizeof(X3D_JOY_REPORT) == 14 ? 1 : -1];
 #define X3D_CONFIG_SIZE ((uint16_t)sizeof(X3D_CONFIG))
 
 uint32_t pipeline_crc32(const void *data, size_t len);
-/* Magic, version, size and CRC; len may exceed 240 (zero-padded feature report). */
+/* Header (magic, version, size, CRC) and every field's range (CONTRACT 4.2);
+ * len may exceed 240 (zero-padded feature report). */
 bool pipeline_validate(const uint8_t *blob, size_t len);
 void pipeline_identity(X3D_CONFIG *out);
 void pipeline_process(const X3D_CONFIG *cfg, const uint8_t raw[X3D_RAW_SIZE], X3D_JOY_REPORT *out);

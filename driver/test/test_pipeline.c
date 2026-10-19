@@ -274,6 +274,25 @@ static int self_checks(void)
         printf("FAIL corrupted blob validates\n");
         bad = 1;
     }
+    /* CRC-valid but out of range: each must be rejected. */
+    for (int k = 0; k < 6; k++) {
+        X3D_CONFIG c;
+        pipeline_identity(&c);
+        switch (k) {
+        case 0: c.axes[0].cal_center = c.axes[0].cal_max; break;
+        case 1: c.axes[2].dz_center = 500; c.axes[2].dz_max = 500; break;
+        case 2: c.axes[1].mode = 2; break;
+        case 3: c.axes[3].target = 4; break;
+        case 4: c.hat_mode = 3; break;
+        default: c.button_map_shift[5] = 33; break;
+        }
+        c.crc32 = pipeline_crc32((const uint8_t *)&c + 12, sizeof(c) - 12);
+        memcpy(bytes, &c, sizeof(bytes));
+        if (pipeline_validate(bytes, sizeof(bytes))) {
+            printf("FAIL out-of-range blob %d validates\n", k);
+            bad = 1;
+        }
+    }
     return bad;
 }
 
