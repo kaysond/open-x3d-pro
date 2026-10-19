@@ -4,6 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Skip releases younger than a week: compromised versions are usually caught by then.
+    cooldown:
+      default-days: 7
     groups:
       minor-patch:
         update-types: [minor, patch]
@@ -12,6 +15,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Skip releases younger than a week: compromised versions are usually caught by then.
+    cooldown:
+      default-days: 7
     groups:
       minor-patch:
         update-types: [minor, patch]
@@ -20,6 +26,9 @@ updates:
     directory: /app
     schedule:
       interval: weekly
+    # Skip releases younger than a week: compromised versions are usually caught by then.
+    cooldown:
+      default-days: 7
     groups:
       minor-patch:
         update-types: [minor, patch]
