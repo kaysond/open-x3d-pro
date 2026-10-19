@@ -24,6 +24,32 @@ function switchCurve(curve: Curve, type: Curve['type']): Curve {
   return { type, points: [0, 0.25, 0.5, 0.75, 1].map((x): [number, number] => [x, curveAt(curve, x)]) };
 }
 
+/** Commits on blur or Enter, so typing a number never passes through invalid in-between values. */
+function CalInput({ value, disabled, onCommit }: { value: number; disabled: boolean; onCommit: (v: number) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const commit = () => {
+    if (text !== null && text.trim() !== '' && Number.isFinite(Number(text))) onCommit(Number(text));
+    setText(null);
+  };
+  return (
+    <input
+      type="number"
+      min={0}
+      max={65535}
+      value={text ?? value}
+      disabled={disabled}
+      onChange={(e) => {
+        setText(e.target.value);
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') setText(null);
+      }}
+    />
+  );
+}
+
 export function AxesPage() {
   const [axis, setAxis] = useState<AxisId>('x');
   const [calibrating, setCalibrating] = useState<AxisId | null>(null);
@@ -92,14 +118,11 @@ export function AxesPage() {
               {(['min', 'center', 'max'] as const).map((key) => (
                 <label key={key} className={styles.field}>
                   <span className={styles.fieldLabel}>{key}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={65535}
+                  <CalInput
                     value={cfg.calibration[key]}
                     disabled={key === 'center' && !symmetric}
-                    onChange={(e) => {
-                      setCal(key, Number(e.target.value));
+                    onCommit={(v) => {
+                      setCal(key, v);
                     }}
                   />
                 </label>
@@ -155,7 +178,11 @@ export function AxesPage() {
                   const { min, center, max } = a.calibration;
                   // Symmetric needs min < center < max (slider default has center = min).
                   if (curveMode === 'symmetric' && !(min < center && center < max)) {
-                    a.calibration.center = Math.round((min + max) / 2);
+                    // A range too narrow for a centre falls back to the identity calibration.
+                    a.calibration =
+                      max - min < 2
+                        ? { min: 0, center: 32768, max: 65535 }
+                        : { min, center: Math.round((min + max) / 2), max };
                   }
                 });
               }}
