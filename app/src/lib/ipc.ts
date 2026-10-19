@@ -1,5 +1,5 @@
 // Typed wrappers for CONTRACT §5. The transport is picked once at startup: real Tauri IPC
-// inside the app, an in-memory mock in a plain browser (npm run dev) and in tests.
+// inside the app, an in-memory mock in a plain browser during `npm run dev` and in tests.
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type {
@@ -55,8 +55,11 @@ const tauriTransport: Transport = {
     }),
 };
 
+// DEV is false in production builds, so the mock and its import are tree-shaken out.
 const transport: Transport =
-  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window ? tauriTransport : createMockTransport();
+  import.meta.env.DEV && !(typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window)
+    ? createMockTransport()
+    : tauriTransport;
 
 export const api = {
   getState: () => transport.invoke('get_state', {}),

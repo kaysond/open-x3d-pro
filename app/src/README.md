@@ -12,7 +12,7 @@ npm run dev          # http://localhost:5173 in any browser, mock backend
 npm run tauri dev    # real app: Tauri runs `npm run dev` and opens the window
 ```
 
-Without `window.__TAURI_INTERNALS__` (a plain browser, or vitest), `src/lib/ipc.ts` uses an in-memory mock instead of Tauri IPC. The mock has a Default and a "DCS World" profile, synthetic 60 Hz input (sine on X/Y, slider sweep, rotating hat, random buttons), calibration tracking and a fake window list. It reports `driverInstalled: false`, like the backend's no-driver fallback. The transport is picked once at startup; nothing else knows which one is active.
+Without `window.__TAURI_INTERNALS__` (a plain browser under `npm run dev`, or vitest), `src/lib/ipc.ts` uses an in-memory mock instead of Tauri IPC. The mock has a Default and a "DCS World" profile, synthetic 60 Hz input (sine on X/Y, slider sweep, rotating hat, random buttons), calibration tracking and a fake window list. It reports `driverInstalled: false`, like the backend's no-driver fallback. The transport is picked once at startup; nothing else knows which one is active. Production builds (`npm run build`, `preview`) never include the mock.
 
 ## Scripts
 
