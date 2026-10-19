@@ -17,6 +17,8 @@
 ; uninstaller (which clears it), so upgrades keep the driver without asking again.
 !define X3D_REG_KEY "Software\OpenX3DPro"
 !define X3D_REG_CONSENT "TrustDriverCert"
+; Provider in openx3d.inf; tells our packages from another vendor's openx3d.inf.
+!define X3D_PROVIDER "Open X3D Pro project"
 !define X3D_SIGNING_DOCS "https://github.com/kaysond/open-x3d-pro#driver-signing"
 
 !if /FileExists "${X3D_DRIVER_SRC}\openx3d.inf"
@@ -153,7 +155,7 @@ FunctionEnd
         ; skips the slow lookup. All openx3d packages, since in-place upgrades leave older ones staged.
         ; Get-WindowsDriver is exact and locale-independent, unlike pnputil /enum-drivers text.
         !insertmacro X3D_SYSTOOL $1 "WindowsPowerShell\v1.0\powershell.exe"
-        nsExec::ExecToStack `"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-WindowsDriver -Online | Where-Object { $$_.OriginalFileName -like '*\openx3d.inf' } | ForEach-Object Driver"`
+        nsExec::ExecToStack `"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-WindowsDriver -Online | Where-Object { $$_.OriginalFileName -like '*\openx3d.inf' -and $$_.ProviderName -eq '${X3D_PROVIDER}' } | ForEach-Object Driver"`
         Pop $0
         Pop $1
         DetailPrint "Get-WindowsDriver openx3d.inf: exit code $0"
@@ -230,7 +232,7 @@ FunctionEnd
   ${If} $3 != "ok"
     ; No recorded names, or a recorded name that failed: Get-WindowsDriver maps original
     ; to published names without parsing pnputil's localized text.
-    nsExec::ExecToLog `"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-WindowsDriver -Online | Where-Object { $$_.OriginalFileName -like '*\openx3d.inf' } | ForEach-Object { pnputil /delete-driver $$_.Driver /uninstall; 'pnputil /delete-driver ' + $$_.Driver + ': exit code ' + $$LASTEXITCODE }"`
+    nsExec::ExecToLog `"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-WindowsDriver -Online | Where-Object { $$_.OriginalFileName -like '*\openx3d.inf' -and $$_.ProviderName -eq '${X3D_PROVIDER}' } | ForEach-Object { pnputil /delete-driver $$_.Driver /uninstall; 'pnputil /delete-driver ' + $$_.Driver + ': exit code ' + $$LASTEXITCODE }"`
     Pop $0
     DetailPrint "driver removal via Get-WindowsDriver: exit code $0"
   ${EndIf}
