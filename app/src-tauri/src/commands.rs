@@ -114,13 +114,19 @@ pub fn save_settings(
     shared: State<'_, Shared>,
     settings: Settings,
 ) -> Result<Settings, String> {
-    let autostart_changed = shared.lock().settings.autostart != settings.autostart;
+    let (autostart_changed, path) = {
+        let s = shared.lock();
+        (
+            s.settings.autostart != settings.autostart,
+            s.settings_path.clone(),
+        )
+    };
     if autostart_changed {
         crate::apply_autostart(&app, settings.autostart)?;
     }
+    // Outside the lock: the device thread takes it on every report.
+    crate::settings::save(&path, &settings).map_err(|e| format!("cannot save settings: {e}"))?;
     mutate(&app, &shared, |s| {
-        crate::settings::save(&s.settings_path, &settings)
-            .map_err(|e| format!("cannot save settings: {e}"))?;
         s.settings = settings.clone();
         Ok(settings)
     })
