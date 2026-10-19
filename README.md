@@ -72,7 +72,8 @@ Then the driver is installed. Other cases:
 
 - **Unticked:** only the app is installed and the stick keeps the stock Windows driver, so there are no curves or remapping in games. Run the installer again to change your mind.
 - **Uninstall** removes the certificate from both stores.
-- **Silent (`/S`) and passive (`/P`) installs** do this only when given `/TRUSTCERT`.
+- **Upgrades** remember the choice: the box starts ticked if the driver was installed before, and passive (`/P`) upgrades and silent `/UPDATE` installs keep the driver.
+- **Other silent (`/S`) and passive (`/P`) installs** do this only when given `/TRUSTCERT`.
 
 ### What the certificate can and cannot do
 
