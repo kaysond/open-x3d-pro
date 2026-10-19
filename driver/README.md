@@ -31,7 +31,7 @@ READ_REPORT policy: hidclass keeps a few reads pending per device. On every USB 
 | Path | What |
 |---|---|
 | `pipeline/pipeline.{h,c}` | Pure C11 pipeline and blob validation, shared by the driver and the host test |
-| `test/` | Host test: `make` runs `core/testdata/vectors.json` (falls back to `vectors.sample.json`) and checks that the descriptor copies match |
+| `test/` | Host test: `make` runs `core/testdata/vectors.json` and checks that the descriptor copies match |
 | `openx3d/` | UMDF driver: `driver.c` (entry, device add), `device.c` (state, read policy), `usb.c`, `hid.c` (IOCTLs), `registry.c`, `descriptor.h`, `openx3d.inf`, `openx3d.vcxproj`, `openx3d.rc` |
 | `scripts/` | `package.ps1` (stage + Inf2Cat), `sign-catalog.ps1` (on-PC catalog signing, embedded in and run by the app installer) |
 
@@ -40,8 +40,7 @@ READ_REPORT policy: hidclass keeps a few reads pending per device. On every USB 
 Host test (Linux/macOS, gcc or clang):
 
 ```sh
-make -C driver/test          # real vectors if present, else the sample
-make -C driver/test sample   # sample only
+make -C driver/test
 ```
 
 Driver (VS 2022 + WDK 10.0.26100, e.g. the `windows-2022` GitHub runner), from the repo root in a Developer prompt:
