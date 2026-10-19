@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cx, Radio, Select } from '../components/controls';
 import { useStore } from '../store';
 import styles from '../styles/ui.module.css';
@@ -17,6 +17,11 @@ export function ButtonsPage() {
   const [recording, setRecording] = useState<number | null>(null);
   const [live, setLive] = useState<string[]>([]);
   const [newButton, setNewButton] = useState(1);
+  // Read at commit time, so changing the button mid-capture does not restart the capture.
+  const newButtonRef = useRef(newButton);
+  useEffect(() => {
+    newButtonRef.current = newButton;
+  }, [newButton]);
 
   // Captures one chord as KeyboardEvent.code names; finishes when every key is released.
   useEffect(() => {
@@ -26,6 +31,10 @@ export function ButtonsPage() {
     const down = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (e.code === 'Escape' && chord.length === 0) {
+        setRecording(null);
+        return;
+      }
       held.add(e.code);
       if (!chord.includes(e.code)) {
         chord.push(e.code);
@@ -41,7 +50,7 @@ export function ButtonsPage() {
         const kb = c.keyBindings[recording];
         // New bindings enter the config only with keys: the backend rejects empty chords.
         if (kb) kb.keys = chord;
-        else c.keyBindings.push({ button: newButton, keys: chord });
+        else c.keyBindings.push({ button: newButtonRef.current, keys: chord });
       });
     };
     window.addEventListener('keydown', down, true);
@@ -50,7 +59,7 @@ export function ButtonsPage() {
       window.removeEventListener('keydown', down, true);
       window.removeEventListener('keyup', up, true);
     };
-  }, [recording, editConfig, newButton]);
+  }, [recording, editConfig]);
 
   const record = (i: number | null) => {
     setLive([]);
@@ -153,7 +162,7 @@ export function ButtonsPage() {
                 }}
               />
               <span className={cx(styles.mono, styles.grow)}>
-                {recording === i ? (live.length ? live.join(' + ') : 'Press keys…') : kb.keys.join(' + ') || '—'}
+                {recording === i ? (live.length ? live.join(' + ') : 'Press keys… (Esc cancels)') : kb.keys.join(' + ') || '—'}
               </span>
               <button
                 onClick={() => {
@@ -177,7 +186,7 @@ export function ButtonsPage() {
           {recording === config.keyBindings.length ? (
             <div className={styles.row}>
               <Select value={newButton} options={PHYSICAL} onChange={setNewButton} />
-              <span className={cx(styles.mono, styles.grow)}>{live.length ? live.join(' + ') : 'Press keys…'}</span>
+              <span className={cx(styles.mono, styles.grow)}>{live.length ? live.join(' + ') : 'Press keys… (Esc cancels)'}</span>
               <button
                 onClick={() => {
                   record(null);
