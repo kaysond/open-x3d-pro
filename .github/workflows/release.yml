@@ -58,6 +58,10 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       artifact-prefix: open-x3d-pro-release
+      sign: true
+    secrets:
+      SIGNING_PFX: ${{ secrets.SIGNING_PFX }}
+      SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
 
   publish:
     needs: build
@@ -93,7 +97,7 @@ jobs:
 
           ### Signing and provenance
 
-          The installer is **not code-signed**, so Windows SmartScreen shows "Windows protected your PC": choose **More info**, then **Run anyway**. Check the download instead: every file below has a GitHub build-provenance attestation proving it was built from this tag by this repository's release workflow: ``gh attestation verify <file> --repo $($env:GITHUB_REPOSITORY) --source-ref refs/tags/$($env:GITHUB_REF_NAME) --signer-workflow $($env:GITHUB_REPOSITORY)/.github/workflows/build.yml``. If you tick the box in the installer, the driver is signed on your PC by a certificate created there, whose private key is deleted immediately. Details: [Driver signing]($($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)#driver-signing).
+          The installer is signed with the project's self-signed certificate, which Windows does not know, so SmartScreen still shows "Windows protected your PC": choose **More info**, then **Run anyway**. Check the download first: compare the signature's certificate with the [fingerprint in the README]($($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)#verifying-a-download), and verify the GitHub build-provenance attestation that every file below has, proving it was built from this tag by this repository's release workflow: ``gh attestation verify <file> --repo $($env:GITHUB_REPOSITORY) --source-ref refs/tags/$($env:GITHUB_REF_NAME) --signer-workflow $($env:GITHUB_REPOSITORY)/.github/workflows/build.yml``. If you tick the box in the installer, the driver is signed on your PC by a certificate created there, whose private key is deleted immediately. Details: [Driver signing]($($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)#driver-signing).
 
           ### SHA-256
 
