@@ -20,25 +20,26 @@
 
 ## `build.yml` (shared by nightly and release)
 
-Input `artifact-prefix`; no secrets. A `build` job on windows-2022 (`timeout-minutes: 60`, `contents: read` only) and an `attest` job on ubuntu-24.04, the only one with `id-token: write` + `attestations: write`, so the build's third-party actions, npm scripts and `build.rs` never hold the OIDC token. Nothing is code-signed:
+Inputs `artifact-prefix` and `sign` (default false); optional secrets `SIGNING_PFX` and `SIGNING_PFX_PASSWORD`, read by one step only. A `build` job on windows-2022 (`timeout-minutes: 60`, `contents: read` only) and an `attest` job on ubuntu-24.04, the only one with `id-token: write` + `attestations: write`, so the build's third-party actions, npm scripts and `build.rs` never hold the OIDC token:
 
 1. msbuild the driver; `driver/scripts/package.ps1` runs Inf2Cat and leaves `openx3d.dll` and `openx3d.cat` unsigned. The installer signs the catalog on the user's PC (`sign-catalog.ps1`).
 2. Stage `openx3d.inf/.dll/.cat` into `app/src-tauri/resources/driver/`, which `hooks.nsh` embeds together with `driver/scripts/sign-catalog.ps1`, then `npm run tauri -- build --bundles nsis`.
 3. Smoke test under Windows PowerShell 5.1: run `sign-catalog.ps1` on a copy of the staged files, `signtool verify /pa` the catalog and `/c` that it covers the DLL, check the certificate is in `Root` + `TrustedPublisher` with EKU code signing only and a critical `CA:FALSE`, that no private key is left, and that `-Remove` deletes it.
-4. Upload artifact `<prefix>-<sha7>` (14 days); the `attest` job downloads it and runs `actions/attest-build-provenance` on every file:
+4. Collect the setup exe. With `sign`, sign it (`Set-AuthenticodeSignature`, SHA-256, no timestamp) with the certificate in `SIGNING_PFX`; the build fails if the secret is missing or `README.md` does not contain that certificate's SHA-256 fingerprint. `npm ci`, the Tauri build and every third-party action have finished before this step, the only one that sees the secrets.
+5. Upload artifact `<prefix>-<sha7>` (14 days); the `attest` job downloads it and runs `actions/attest-build-provenance` on every file:
    - `Open-X3D-Pro_<ver>_x64-setup.exe`
-   - `BUILD_INFO.txt` (commit, ref, build time, run URL)
+   - `BUILD_INFO.txt` (commit, ref, build time, run URL, signing certificate fingerprint or `unsigned`)
    - `SHA256SUMS.txt`
 
-Verify a download with `gh attestation verify <file> --repo kaysond/open-x3d-pro --source-ref <refs/tags/vX.Y.Z or refs/heads/main> --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml`; `--repo` alone accepts builds of any branch. The installer creates a per-PC driver certificate only if the user ticks the box on its first page (or passes `/TRUSTCERT` to a silent/passive install). See [README: Driver signing](../../README.md#driver-signing).
+Verify a download with `gh attestation verify <file> --repo kaysond/open-x3d-pro --source-ref <refs/tags/vX.Y.Z or refs/heads/main> --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml`; `--repo` alone accepts builds of any branch. See [README: Verifying a download](../../README.md#verifying-a-download). The installer creates a per-PC driver certificate only if the user ticks the box on its first page (or passes `/TRUSTCERT` to a silent/passive install). See [README: Driver signing](../../README.md#driver-signing).
 
 The app version is never changed for nightlies (NSIS needs plain semver); the sha in the artifact name and `BUILD_INFO.txt` identify the build.
 
 ## `nightly.yml`
 
-1. `build`: `build.yml`.
+1. `build`: `build.yml`, without `sign`.
 
-Every push to `main` builds `open-x3d-pro-nightly-<sha7>`. A newer push cancels a running nightly. No tag or GitHub Release is created.
+Every push to `main` builds `open-x3d-pro-nightly-<sha7>`, unsigned. A newer push cancels a running nightly. No tag or GitHub Release is created.
 
 Manual runs (Actions, Nightly, **Run workflow**) can pick any branch, e.g. to get an installer for a PR branch.
 
@@ -52,10 +53,30 @@ Artifacts need a signed-in GitHub account.
 ## `release.yml` (tag `v*`)
 
 1. `check` (ubuntu-24.04): checks that the tagged commit is on `main` and that the tag version matches `tauri.conf.json`, `app/package.json`, root `Cargo.toml`, the INF `DriverVer` and the `openx3d.rc` `ProductVersion` (`a.b.c.0`).
-2. `build`: `build.yml`.
+2. `build`: `build.yml` with `sign: true` and the two signing secrets.
 3. `publish` (the only job with `contents: write`, in environment `release`): GitHub Release with the artifact's files. `v0.*` tags and tags with a `-suffix` are published as pre-releases.
 
-No repository secrets are needed. Repository settings to set once: required reviewers on the `release` environment, and a tag ruleset that limits who can create `v*` tags.
+Repository settings to set once: required reviewers on the `release` environment, a tag ruleset that limits who can create `v*` tags, and the release signing certificate.
+
+### Release signing certificate
+
+A self-signed certificate limited to code signing, valid 10 years. Windows does not trust it; users compare its fingerprint with the README.
+
+```sh
+openssl req -x509 -newkey rsa:3072 -sha256 -days 3650 -noenc -keyout key.pem -out cert.pem \
+  -subj "/CN=Open X3D Pro release signing" \
+  -addext "basicConstraints=critical,CA:FALSE" \
+  -addext "keyUsage=critical,digitalSignature" \
+  -addext "extendedKeyUsage=critical,codeSigning"
+openssl pkcs12 -export -inkey key.pem -in cert.pem -out signing.pfx   # asks for a password
+base64 -w0 signing.pfx | gh secret set SIGNING_PFX
+gh secret set SIGNING_PFX_PASSWORD                                    # asks for the same password
+# The fingerprint for README "Release signature"
+openssl x509 -in cert.pem -noout -fingerprint -sha256 | cut -d= -f2 | tr -d :
+shred -u key.pem signing.pfx
+```
+
+Put the fingerprint in the README before tagging. To replace the certificate, repeat this and update the README in the same commit; older releases then no longer match the README.
 
 ## Cutting a release
 

@@ -263,8 +263,7 @@ since 5.19 [S12], but it needs a private bpffs mount and chown/chmod management 
 ### 4.1 Placement
 
 * `build.yml`: new job **`linux`** next to the Windows `build`, on `ubuntu-22.04`. glibc 2.35 is below Debian 12's 2.36,
-  and Tauri recommends building on the oldest target base [S23][S28]. It needs no SignPath, so it runs in parallel. Note
-  that `nightly.yml`/`release.yml` still gate everything on the SignPath `check`. When `ubuntu-22.04` is retired, move to
+  and Tauri recommends building on the oldest target base [S23][S28]. It runs in parallel. When `ubuntu-22.04` is retired, move to
   24.04 and drop Debian 12.
 * `ci.yml`: `rust-linux` gains the WebKit dev packages once `tauri` stops being `cfg(windows)`-only. Add new lanes
   `linux-e2e` and, for (B), `hid-bpf-vm`.

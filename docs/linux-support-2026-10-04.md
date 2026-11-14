@@ -262,7 +262,7 @@ evdev:input:b0003v046DpC215*
 | `linux-e2e` | ubuntu-24.04, sudo | 1. `modprobe uinput uhid`, then `setfacl` (no logind seat on runners).<br>2. uhid **stock** fake (`BUS_VIRTUAL`, the real descriptor once captured) → `ReadOnly` reader.<br>3. uhid fake of the **BPF-shaped** device, with the harness answering SET/GET_REPORT 3/4 → daemon push/info.<br>4. Phase 2 adds B: grab, fuzz reset, replug [distribution.md §4.3; code-reuse.md §6.7] |
 | `linux-bundle` (`build.yml`) | ubuntu-24.04 + `container: ubuntu:22.04` | 1. `tauri build --bundles deb,rpm,appimage`.<br>2. `dpkg-deb -I/-c`, `rpm -qip --scripts`.<br>3. Install smoke on debian:12/13, ubuntu:24.04, fedora:44, archlinux.<br>4. `udevadm verify`, `systemd-analyze verify`.<br>5. One SHA256SUMS together with the Windows assets [distribution.md §4.1–4.2] |
 | `hid-bpf-vm` (phase 2) | ubuntu-24.04 + KVM | 1. virtme-ng with a kernel built from `tools/testing/selftests/hid/config` (`HID_BPF=y`, `UHID=y`, BTF).<br>2. Matrix: 6.12 LTS and latest stable, cached `bzImage`.<br>3. uhid fake → BPF → vectors checked on evdev and hidraw [distribution.md §4.4] |
-| `release.yml` | — | Split the SignPath `check` gate so Linux assets publish without SignPath secrets. Linux assets are unsigned; SHA256SUMS is the anchor [code-reuse.md §6.8] |
+| `release.yml` | — | Publish the Linux assets. They are unsigned; SHA256SUMS is the anchor [code-reuse.md §6.8] |
 
 ### 4.10 Support tiers
 
@@ -543,7 +543,6 @@ Person-days, optimistic/likely. Item IDs are from code-reuse.md §5.1 unless not
 12. **WebKitGTK instability:** NVIDIA DMABUF problems, AppImage EGL failures, and a bundler 2.10.0 that is 8 days old. The daemon split keeps games isolated from UI crashes [app-stack.md §1.2].
 13. **hidapi `linux-native-basic-udev` maturity** [code-reuse.md §6.1]. Sysfs descriptor detection avoids relying on its per-collection enumeration.
 14. **One rdesc fixup per device.** A future distro-shipped c215 fixup would collide with ours [distribution.md §3.1].
-15. **Release plumbing.** The SignPath-only `check` job blocks Linux releases until it is split [code-reuse.md §6.8].
 
 ## 10. Sources
 

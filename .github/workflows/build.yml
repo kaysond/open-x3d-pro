@@ -1,7 +1,8 @@
 name: Build installer
 
-# Shared by nightly.yml and release.yml: unsigned NSIS installer (app + driver package; the installer signs the driver
-# catalog on the user's PC with sign-catalog.ps1), with a GitHub build-provenance attestation, uploaded as one artifact.
+# Shared by nightly.yml and release.yml: NSIS installer (app + driver package; the installer signs the driver catalog
+# on the user's PC with sign-catalog.ps1), signed with the release certificate when `sign` is set, with a GitHub
+# build-provenance attestation, uploaded as one artifact.
 on:
   workflow_call:
     inputs:
@@ -9,6 +10,16 @@ on:
         description: Artifact name; '-<sha7>' is appended
         type: string
         required: true
+      sign:
+        description: Sign the setup exe with the release certificate (needs both secrets)
+        type: boolean
+        default: false
+    secrets:
+      SIGNING_PFX:
+        description: Base64 PKCS#12 with the self-signed release code-signing certificate and its key
+        required: false
+      SIGNING_PFX_PASSWORD:
+        required: false
     outputs:
       artifact:
         description: Name of the uploaded artifact
@@ -50,7 +61,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      # signtool only verifies (smoke test below); nothing in CI signs.
+      # signtool only verifies (smoke test below).
       - name: Put signtool and Inf2Cat on PATH
         run: |
           foreach ($exe in 'x64\signtool.exe', 'x86\Inf2Cat.exe') {
@@ -105,8 +116,13 @@ jobs:
           & "$dir\sign-catalog.ps1" -Remove
           if (Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Where-Object Subject -eq $subject) { throw '-Remove left certificates behind' }
 
+      # The only step that holds the signing secrets; everything third-party has already run.
       - name: Collect artifact
         id: collect
+        env:
+          SIGN: ${{ inputs.sign }}
+          SIGNING_PFX: ${{ secrets.SIGNING_PFX }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
         run: |
           $version = (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           # app/src-tauri is a member of the root workspace, so the bundle lands in the root target dir.
@@ -114,12 +130,26 @@ jobs:
           $setup = @(Get-ChildItem "$target\release\bundle\nsis\*-setup.exe")
           if ($setup.Count -ne 1) { throw "expected one NSIS setup exe in $target\release\bundle\nsis, found $($setup.Count)" }
           New-Item -ItemType Directory artifacts -Force | Out-Null
-          Copy-Item $setup[0].FullName "artifacts\Open-X3D-Pro_${version}_x64-setup.exe"
+          $out = "artifacts\Open-X3D-Pro_${version}_x64-setup.exe"
+          Copy-Item $setup[0].FullName $out
+          $signer = 'unsigned'
+          if ($env:SIGN -eq 'true') {
+            if (-not $env:SIGNING_PFX) { throw 'secret SIGNING_PFX is not set' }
+            $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+              [Convert]::FromBase64String($env:SIGNING_PFX), $env:SIGNING_PFX_PASSWORD)
+            $signer = $cert.GetCertHashString('SHA256')
+            # Users compare this fingerprint with the README, so a release must not carry any other.
+            if (-not (Select-String -Path README.md -SimpleMatch $signer -Quiet)) { throw "README.md does not list certificate $signer" }
+            # No timestamp: the certificate is self-signed, so it is checked by fingerprint, not by chain or date.
+            $sig = Set-AuthenticodeSignature $out -Certificate $cert -HashAlgorithm SHA256
+            if ($sig.SignerCertificate.Thumbprint -ne $cert.Thumbprint) { throw "signing $out failed: $($sig.StatusMessage)" }
+          }
           @(
             "Open X3D Pro $version"
             "commit: $env:GITHUB_SHA ($env:GITHUB_REF)"
             "built:  $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
             "run:    $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            "signer: $signer"
           ) | Set-Content artifacts\BUILD_INFO.txt
           $sums = Get-ChildItem artifacts -File | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
           $sums | Set-Content artifacts\SHA256SUMS.txt

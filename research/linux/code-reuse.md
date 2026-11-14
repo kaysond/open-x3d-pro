@@ -59,7 +59,7 @@ Legend: **AG** = OS-agnostic as-is · **AG\*** = agnostic but with a hidden Wind
 | `app/src/lib/{mock,pipeline}.ts` | AG | — |
 | `app/src/pages/{SettingsPage,ProfilesPage}.tsx`, `App.tsx` | AG\* | Windows copy: the "Code signing… Windows asks once" card, `placeholder="C:\Games\game.exe"`, and the "driver" wording. Gate on `navigator.userAgent.includes('Linux')`; no contract field needed. |
 | `.github/workflows/ci.yml` | extend | `rust-linux` must install the WebKitGTK stack now that the shell compiles on Linux. New uinput e2e job (B) and BPF build job (A). |
-| `.github/workflows/build.yml`, `nightly.yml`, `release.yml` | WIN + extend | Add a Linux bundle job. SignPath does not apply to Linux, but the `release.yml` `check` job requires SignPath secrets and would also block Linux releases unless that gate is split. |
+| `.github/workflows/build.yml`, `nightly.yml`, `release.yml` | WIN + extend | Add a Linux bundle job. |
 
 **Contract impact.**
 - `InputFrame`, all §5 commands and events, and §3 types stay **unchanged** on Linux. In B, `seq` is an app-side counter (as in today's
@@ -314,7 +314,7 @@ layout-independent because `KEY_*` codes are positions, like scan codes. Permiss
 - `driver-host-test`: unchanged, plus the integer variant (A).
 - `bpf-build` (A): clang-18 (Ubuntu 24.04 default) `-target bpf -O2 -g` against vendored udev-hid-bpf headers. Optional VM job (§6.5).
 - `linux-bundle` (nightly/release): `npm run tauri -- build --bundles deb,rpm,appimage`. AppImage built on 24.04 needs glibc ≥ 2.39
-  (Debian 13 has 2.41). Unsigned, with SHA256SUMS. The release `check` gate needs splitting so missing SignPath secrets do not block Linux.
+  (Debian 13 has 2.41). Unsigned, with SHA256SUMS.
 
 ## 5. Effort, phases, coexistence
 
@@ -409,7 +409,6 @@ layout-independent because `KEY_*` codes are positions, like scan codes. Permiss
    - **A:** compile-only plus the host vector test on stock runners. A real verifier and behaviour test needs a kernel with
      `CONFIG_HID_BPF` (virtme-ng VM job), using `/dev/uhid` to impersonate 046d:c215 (bus USB, so `hid-lg` binds) — the approach of
      the kernel's own HID-BPF selftests.
-8. **Release plumbing.** The SignPath-only `check` job blocks Linux releases until it is split.
 
 Sources: [hid-input.c](https://raw.githubusercontent.com/torvalds/linux/master/drivers/hid/hid-input.c) ·
 [hid-lg.c](https://raw.githubusercontent.com/torvalds/linux/master/drivers/hid/hid-lg.c) ·

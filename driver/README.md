@@ -93,7 +93,7 @@ Debugging: a Debug build logs `openx3d: ...` through `OutputDebugString`; view i
 ## Known limits
 
 - x64 only. ARM64 would need WHQL or attestation signing, because Windows on ARM requires Microsoft-signed drivers.
-- The catalog is signed on each PC by a certificate created there (not WHQL), and the installer and app are unsigned, so Smart App Control (when on) blocks them.
+- The catalog is signed on each PC by a certificate created there (not WHQL), and the installer is signed by the project's self-signed certificate, so Smart App Control (when on) blocks them.
 - Supported OS: Windows 10 2004–22H2 (build 19041+) and Windows 11. Earlier builds have no matching models section.
 - No output reports and no force feedback (the stick has none). Feature report 4 is GET only.
 - Key bindings (keyboard chords) are emitted by the app, not the driver, so games running as administrator never see them (Windows UIPI blocks input from a less privileged process).

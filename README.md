@@ -115,35 +115,51 @@ Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher |
 
 `HasPrivateKey` must be `False`.
 
-### The installer and app
-
-The setup exe, the app and the uninstaller are **not code-signed**. A self-signed certificate would change nothing for you: SmartScreen, UAC and Smart App Control treat it exactly like no signature. A certificate Windows trusts out of the box costs money every year. Instead, every download can be traced to the commit and CI run that built it (below).
-
-### Provenance and attestation
-
-- Nightlies and releases are built only by GitHub Actions from this repository: [`build.yml`](.github/workflows/build.yml), called by [`nightly.yml`](.github/workflows/nightly.yml) and [`release.yml`](.github/workflows/release.yml).
-- On the Windows runner, CI runs `sign-catalog.ps1` on the exact files the installer ships. It checks that the signed catalog verifies and covers `openx3d.dll`, that the certificate has the extensions above, that no private key is left, and that `-Remove` cleans up.
-- Each artifact carries `BUILD_INFO.txt` (commit, ref, build time, run URL) and `SHA256SUMS.txt`.
-- Every file gets a [GitHub build-provenance attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations) (SLSA provenance, signed through Sigstore with the workflow's OIDC identity). It proves the file was built from a specific commit of `kaysond/open-x3d-pro` by a specific workflow run. Verify it before running the installer:
-
-  ```sh
-  # A release: built from that tag by the release workflow
-  gh attestation verify Open-X3D-Pro_0.1.0_x64-setup.exe --repo kaysond/open-x3d-pro \
-    --source-ref refs/tags/v0.1.0 --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml
-  # A nightly: built from main (any branch can be built by hand, so pin the ref)
-  gh attestation verify Open-X3D-Pro_0.1.0_x64-setup.exe --repo kaysond/open-x3d-pro \
-    --source-ref refs/heads/main --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml
-  ```
-
-  `--repo` alone accepts any attested build of the repository, including a manual run of a modified workflow on a branch.
-
-  Without the GitHub CLI, compare the file's hash (`Get-FileHash` in PowerShell) with `SHA256SUMS.txt` and the release notes, and look the attestation up under the repository's **Attestations** page.
-
 ### Limits
 
 - **Smart App Control** (Windows 11), when **on**, blocks the installer and the app, with no per-app override. It only accepts certificates from CAs in Microsoft's [Trusted Root Program](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control) and ignores roots added locally, and it checks every executable, not just downloads. It would very likely also block the locally signed driver DLL. Its *evaluation* mode blocks nothing, and it is off on most PCs. To use Open X3D Pro, turn it off in Windows Security, App & browser control; since the April 2026 update (KB5083769) it can be turned back on later.
-- **SmartScreen and UAC:** the downloaded installer shows "Windows protected your PC" (choose "More info", then "Run anyway"), and UAC shows "Unknown publisher".
-- Early nightlies (before 2026-10-05) used a throwaway certificate. Remove it with `certutil -delstore Root "Open X3D Pro (unsigned beta)"` and `certutil -delstore TrustedPublisher "Open X3D Pro (unsigned beta)"`.
+
+## Verifying a download
+
+Nightlies and releases are built only by GitHub Actions from this repository: [`build.yml`](.github/workflows/build.yml), called by [`nightly.yml`](.github/workflows/nightly.yml) and [`release.yml`](.github/workflows/release.yml). Each build carries `BUILD_INFO.txt` (commit, ref, build time, run URL, signing certificate) and `SHA256SUMS.txt`. Check a download before running it.
+
+### Release signature
+
+The setup exe of every release is signed by the release workflow with the project's self-signed certificate. Like the driver certificate it is limited to code signing (critical `CA:FALSE`, Extended Key Usage Code Signing only). Its private key is a GitHub Actions secret that only the release workflow receives. Its SHA-256 fingerprint is:
+
+```
+(not created yet)
+```
+
+```powershell
+$sig = Get-AuthenticodeSignature .\Open-X3D-Pro_0.1.0_x64-setup.exe
+# Must print the fingerprint above
+[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($sig.SignerCertificate.RawData)) -replace '-'
+# 'UnknownError' is expected (Windows does not trust the certificate); 'HashMismatch' means the file was changed after signing
+$sig.Status
+```
+
+- Windows does not know this certificate, so **SmartScreen** still shows "Windows protected your PC" (choose "More info", then "Run anyway") and **UAC** shows "Unknown publisher". Do not install the certificate: comparing the fingerprint is the whole check, and the installer never adds it to any store.
+- Nightlies, the app exe and the uninstaller are not signed. Check nightlies by attestation.
+
+### Provenance and attestation
+
+Every file of every nightly and release gets a [GitHub build-provenance attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations) (SLSA provenance, signed through Sigstore with the workflow's OIDC identity). It proves the file was built from a specific commit of `kaysond/open-x3d-pro` by a specific workflow run:
+
+```sh
+# A release: built from that tag by the release workflow
+gh attestation verify Open-X3D-Pro_0.1.0_x64-setup.exe --repo kaysond/open-x3d-pro \
+  --source-ref refs/tags/v0.1.0 --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml
+# A nightly: built from main (any branch can be built by hand, so pin the ref)
+gh attestation verify Open-X3D-Pro_0.1.0_x64-setup.exe --repo kaysond/open-x3d-pro \
+  --source-ref refs/heads/main --signer-workflow kaysond/open-x3d-pro/.github/workflows/build.yml
+```
+
+`--repo` alone accepts any attested build of the repository, including a manual run of a modified workflow on a branch.
+
+Without the GitHub CLI, compare the file's hash (`Get-FileHash` in PowerShell) with `SHA256SUMS.txt` and the release notes, and look the attestation up under the repository's **Attestations** page.
+
+On the Windows runner, CI also runs `sign-catalog.ps1` on the exact files the installer ships. It checks that the signed catalog verifies and covers `openx3d.dll`, that the certificate has the extensions above, that no private key is left, and that `-Remove` cleans up.
 
 ## Privacy
 

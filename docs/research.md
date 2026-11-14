@@ -31,7 +31,7 @@ Signatures (checked with osslsigncode): `.sys` embedded SHA-1 Logitech/VeriSign 
 | F. Pure user-mode viewer | no | no | n/a | Phase 0: needed anyway, doubles as descriptor/report dumper. Cannot change what games see. |
 | G. Repackage WmFilter.sys | — | — | no | Dead. |
 
-Sequence: F → C (go/no-go install test on user's Win11) → B → release signing.
+Sequence: F → C (go/no-go install test on user's Win11) → B.
 
 ## App stack
 
@@ -57,8 +57,8 @@ Tauri plan:
 - Backend (Rust): `hidapi` (`windows-native`) opens `HID\VID_046D&PID_C215`, reads input reports for the live view, writes the driver's vendor feature report (0xFF00:0001 collection) to apply a profile. Profile switcher: `SetWinEventHook(EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT)` on the Tauri main thread (it owns a message loop), resolve PID → full image path, case-insensitive match against profile `exe` paths (full path first, basename fallback), debounce 250 ms, fall back to the default profile when no match. Optional second trigger "while process is running" via a 2 s `sysinfo` scan for games that lose foreground to overlays. Profiles: JSON files in `%APPDATA%\<app>\profiles\`, one default + per-exe; schema holds axes {calibration, invert, deadzones, curve points/exponent}, button map, shift layer. Tray: open window, active profile name, pause switching, quit. Autostart: `tauri-plugin-autostart` (HKCU Run key), per-user — the driver keeps the last config across reboot in its device registry key so the agent need not race logon.
 - Frontend: plain HTML/JS, canvas curve editor with live marker, per-axis tabs, profile list with "add running app" (backend enumerates windows with titles → pick → stores exe path).
 - Installer: Tauri NSIS bundler, `installMode: perMachine`, driver files as `resources`, `installerHooks` `.nsh` with `NSIS_HOOK_POSTINSTALL` → `pnputil /add-driver "$INSTDIR\driver\x3dpro.inf" /install` and `NSIS_HOOK_PREUNINSTALL` → `pnputil /delete-driver oemN.inf /uninstall` (record `oemN` at install). `webviewInstallMode: downloadBootstrapper`.
-- Signing: Tauri `signCommand` hook → signtool with Artifact Signing / SignPath / OV cert; same cert signs the driver catalog (Inf2Cat) in the same CI job.
-- CI: one workflow on pinned `windows-2022` (WDK 10.1.26100.4202 preinstalled) or `windows-2025-vs2026` + WDK NuGet 10.0.28000.2526: msbuild UMDF driver → Inf2Cat → signtool → `tauri-action` (NSIS) → upload artifacts. Local dev on Debian: `cargo tauri dev` runs the UI against mocked input (recorded report logs); Rust backend unit-tests the curve/deadzone math and the profile matcher without hardware.
+- Signing: see README "Driver signing" and "Verifying a download".
+- CI: one workflow on pinned `windows-2022` (WDK 10.1.26100.4202 preinstalled) or `windows-2025-vs2026` + WDK NuGet 10.0.28000.2526: msbuild UMDF driver → Inf2Cat → `tauri-action` (NSIS) → upload artifacts. Local dev on Debian: `cargo tauri dev` runs the UI against mocked input (recorded report logs); Rust backend unit-tests the curve/deadzone math and the profile matcher without hardware.
 
 Checks before committing (Windows host):
 1. ~~HID collection opens and streams while DirectInput holds it~~ **PASSED** (Chrome WebHID, Win10, 2026-10-03). `hidapi` uses the same `hid.dll` path.
@@ -128,20 +128,16 @@ Skip: macros, encoders, logic, trimmers, mixing.
 2. ~~The device on any machine I can reach~~ — **done via WebHID**: parsed descriptor + live reports captured (see Probe results). Raw 122-byte hex still useful but no longer blocking (parsed items are enough to regenerate an equivalent descriptor). bInterval/speed: **done** via `tools/probe-usb.ps1` → `probe/x3dpro-usb.txt` (low-speed, 10 ms).
 3. ~~Windows info dump~~ — **done on Win10** (`probe/`). Re-run the fixed `tools/probe-x3dpro.ps1` + `tools/webhid-test.html` on the Win11 box when available. Collects OS/Secure Boot/HVCI/CI policy state, `pnputil /enum-devices /stack`, HID caps + raw reports, OEM/DirectInput/WmFilter registry, CodeIntegrity events, `setupapi.dev.log` C215 entries, WebView2 presence, installed WDK/VS. Extra one-liners if the script fails: `Confirm-SecureBootUEFI`; `Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard | select SecurityServicesRunning`; `reg query HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState`; `citool --list-policies`; `pnputil /enum-devices /connected /deviceids /stack /drivers`.
 4. **Windows build environment for driver AND app**: decided — GitHub Actions Windows runners for both (no Linux toolchain for UMDF; Tauri NSIS from Linux is possible via cargo-xwin but CI is the release path). `gh` is logged in (account `kaysond`); need go-ahead + repo name (public → free runners).
-5. **Code-signing certificate for release** (not for dev): OV cert ($150–300/yr, hardware token), Azure Artifact Signing (~$9.99/mo, paid Azure sub, Individual validation US/Canada only, catalog use unverified), SignPath Foundation (free for OSI-licensed public repos, catalog signing unverified), or Certum Open Source (€49). Dev/beta can use a self-signed cert installed to LocalMachine Root + TrustedPublisher on your own machine.
 
 ### Not blocking
-6. EV cert + Partner Center account (~$360/yr + weeks) — only for option A fallback, ARM64, or to remove the "Would you like to install this device software?" prompt by attestation-signing the UMDF package.
 7. Debian packages — mostly moot now that CI builds everything. Still useful locally (no root, `apt download` + `dpkg -x`): `osslsigncode` (verify signed artifacts), `vim-common` (xxd), `usbutils` (if the stick is ever plugged in here). Root-only and not planned: `wine`, `qemu-system-x86` + kvm group.
 8. Both hardware revisions (35.00 and 57.11) and a Win10 22H2 test box.
-9. Hardware token or cloud HSM for whichever cert is chosen.
 10. Decisions from you: target games/anti-cheat posture (in-stack design keeps real VID/PID), yearly signing budget, acceptable beta UX (self-signed root? SmartScreen "Run anyway"?), whether option B's extra buttons justify more code than option C.
 11. Network egress from the sandbox to `github.com`, `api.nuget.org`, `crates.io`, `registry.npmjs.org`, `deb.debian.org` (all answered this session), and authenticated GitHub code search for `WmFilter`/`WmHidLo`/`DeadBandX` notes.
 
 ## Unresolved questions (ordered by impact)
 1. GO/NO-GO: UMDF-only package with non-Microsoft catalog signature installs silently on retail Win11 24H2/25H2 with Secure Boot + HVCI + default Smart App Control? (docs + 3 shipping projects say yes; untested here)
 2. Does our INF out-rank inbox `input.inf`/`hidusb` after `pnputil /add-driver /install`, and survive Windows Update driver offers? (`setupapi.dev.log` Rank / Signer Score)
-3. Does Artifact Signing / SignPath sign an Inf2Cat catalog acceptably?
 4. Is the 57.11 descriptor identical to 35.00; what is the "Undefined"-usage feature report; does GET_REPORT stall on Windows too?
 5. Does joy.cpl/DirectInput need `IOCTL_HID_GET_INPUT_REPORT` in addition to `IOCTL_HID_READ_REPORT` (implement both, as vhidmini2 does)?
 5b. Does `HidD_SetFeature` from a non-elevated Tauri backend reach our UMDF driver's vendor report, and does `SetWinEventHook` resolve full exe paths for elevated games (see App stack checks)?
