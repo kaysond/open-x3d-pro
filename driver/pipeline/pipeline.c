@@ -86,15 +86,6 @@ static double clamp(double v, double lo, double hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-/* Division where den == 0 (degenerate calibration/deadzones) saturates the way
- * num/den -> +-inf would after the clamp that always follows, instead of NaN. */
-static double ratio(double num, double den)
-{
-    if (den != 0.0)
-        return num / den;
-    return num > 0.0 ? 1.0 : (num < 0.0 ? -1.0 : 0.0);
-}
-
 static double lut_lookup(const X3D_AXIS_CONFIG *a, double x)
 {
     double pos = clamp(x, 0.0, 1.0) * 16.0;
@@ -110,20 +101,21 @@ static uint16_t to_u16(double v)
     return (uint16_t)(clamp(v, 0.0, 65535.0) + 0.5); /* round half up; v >= 0 here */
 }
 
+/* No denominator below can be zero for a config that passed pipeline_validate. */
 static uint16_t process_axis(const X3D_AXIS_CONFIG *a, unsigned raw16)
 {
     double r = raw16, min = a->cal_min, ctr = a->cal_center, max = a->cal_max;
     double dzc = a->dz_center / 1000.0, dzmin = a->dz_min / 1000.0, dzmax = a->dz_max / 1000.0;
 
     if (a->mode == X3D_MODE_FULL) {
-        double v = clamp(ratio(r - min, max - min), 0.0, 1.0);
+        double v = clamp((r - min) / (max - min), 0.0, 1.0);
         if (a->invert)
             v = 1.0 - v;
-        v = clamp(ratio(v - dzmin, 1.0 - dzmin - dzmax), 0.0, 1.0);
+        v = clamp((v - dzmin) / (1.0 - dzmin - dzmax), 0.0, 1.0);
         return to_u16(lut_lookup(a, v));
     }
 
-    double v = r <= ctr ? -ratio(ctr - r, ctr - min) : ratio(r - ctr, max - ctr);
+    double v = r <= ctr ? -(ctr - r) / (ctr - min) : (r - ctr) / (max - ctr);
     v = clamp(v, -1.0, 1.0);
     if (a->invert)
         v = -v;
@@ -133,7 +125,7 @@ static uint16_t process_axis(const X3D_AXIS_CONFIG *a, unsigned raw16)
      * still rests at exactly 32768 (same as the Rust reference) */
     if (m <= dzc)
         return 32768;
-    m = clamp(ratio(m - dzc, 1.0 - dzc - dz_end), 0.0, 1.0);
+    m = clamp((m - dzc) / (1.0 - dzc - dz_end), 0.0, 1.0);
     return to_u16(32768.0 + (v < 0.0 ? -1.0 : 1.0) * lut_lookup(a, m) / 2.0);
 }
 

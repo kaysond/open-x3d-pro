@@ -3,8 +3,6 @@
  * (PLUGPLAY_REGKEY_DEVICE | WDF_REGKEY_DEVICE_SUBKEY), so that is where it lives. */
 #include "driver.h"
 
-static const WCHAR kValueName[] = L"Config";
-
 static NTSTATUS
 OpenKey(_In_ WDFDEVICE Device, _In_ ACCESS_MASK Access, _Out_ WDFKEY *Key)
 {
@@ -12,19 +10,11 @@ OpenKey(_In_ WDFDEVICE Device, _In_ ACCESS_MASK Access, _Out_ WDFKEY *Key)
                                     WDF_NO_OBJECT_ATTRIBUTES, Key);
 }
 
-static VOID
-InitValueName(_Out_ UNICODE_STRING *Name)
-{
-    Name->Buffer = (PWCH)kValueName;
-    Name->Length = (USHORT)(sizeof(kValueName) - sizeof(WCHAR));
-    Name->MaximumLength = (USHORT)sizeof(kValueName);
-}
-
 NTSTATUS
 RegistryLoadConfig(_In_ WDFDEVICE Device, _Out_ X3D_CONFIG *Config)
 {
     UCHAR buffer[sizeof(X3D_CONFIG)];
-    UNICODE_STRING name;
+    DECLARE_CONST_UNICODE_STRING(name, L"Config");
     WDFKEY key;
     ULONG length = 0, type = 0;
     NTSTATUS status;
@@ -34,7 +24,6 @@ RegistryLoadConfig(_In_ WDFDEVICE Device, _Out_ X3D_CONFIG *Config)
     if (!NT_SUCCESS(status)) {
         return status;
     }
-    InitValueName(&name);
     status = WdfRegistryQueryValue(key, &name, (ULONG)sizeof(buffer), buffer, &length, &type);
     WdfRegistryClose(key);
     if (!NT_SUCCESS(status)) {
@@ -51,7 +40,7 @@ RegistryLoadConfig(_In_ WDFDEVICE Device, _Out_ X3D_CONFIG *Config)
 NTSTATUS
 RegistrySaveConfig(_In_ WDFDEVICE Device, _In_ const X3D_CONFIG *Config)
 {
-    UNICODE_STRING name;
+    DECLARE_CONST_UNICODE_STRING(name, L"Config");
     WDFKEY key;
     NTSTATUS status;
 
@@ -59,7 +48,6 @@ RegistrySaveConfig(_In_ WDFDEVICE Device, _In_ const X3D_CONFIG *Config)
     if (!NT_SUCCESS(status)) {
         return status;
     }
-    InitValueName(&name);
     status = WdfRegistryAssignValue(key, &name, REG_BINARY, (ULONG)sizeof(X3D_CONFIG), (PVOID)Config);
     WdfRegistryClose(key);
     return status;
