@@ -1,34 +1,40 @@
 version: 2
-updates:
-  - package-ecosystem: github-actions
-    directory: /
+
+# One weekly pull request covering every ecosystem below.
+multi-ecosystem-groups:
+  weekly:
     schedule:
       interval: weekly
-    # Skip releases younger than a week: compromised versions are usually caught by then.
-    cooldown:
-      default-days: 7
-    groups:
-      minor-patch:
-        update-types: [minor, patch]
 
+updates:
   - package-ecosystem: cargo
     directory: /
-    schedule:
-      interval: weekly
+    multi-ecosystem-group: weekly
+    patterns: ["*"]
     # Skip releases younger than a week: compromised versions are usually caught by then.
     cooldown:
       default-days: 7
-    groups:
-      minor-patch:
-        update-types: [minor, patch]
+    # Major upgrades are done by hand.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /app
-    schedule:
-      interval: weekly
-    # Skip releases younger than a week: compromised versions are usually caught by then.
+    multi-ecosystem-group: weekly
+    patterns: ["*"]
     cooldown:
       default-days: 7
-    groups:
-      minor-patch:
-        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    multi-ecosystem-group: weekly
+    patterns: ["*"]
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
