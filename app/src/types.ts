@@ -1,4 +1,4 @@
-// Mirrors docs/CONTRACT.md §3 and §5 one-to-one.
+// Mirrors CONTRACT §3 and §5 one-to-one.
 
 export type AxisId = 'x' | 'y' | 'rz' | 'slider';
 export const AXES: readonly AxisId[] = ['x', 'y', 'rz', 'slider'];

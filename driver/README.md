@@ -1,6 +1,6 @@
 # Open X3D Pro driver
 
-A user-mode (UMDF 2) HID minidriver for the Logitech Extreme 3D Pro (`USB\VID_046D&PID_C215`). It takes over from the inbox `hidusb`, reads the stick's 7-byte reports itself, and runs them through the configurable pipeline in `pipeline/` (calibration, inversion, deadzones, curves, axis remap, hat-as-buttons, a shift layer, button remap). It then publishes a 32-button joystick and a vendor channel for the app. There is no kernel code, so Secure Boot and Memory Integrity (HVCI) can stay on. The binding spec is in [`docs/CONTRACT.md`](../docs/CONTRACT.md) §2 and §4.
+A user-mode (UMDF 2) HID minidriver for the Logitech Extreme 3D Pro (`USB\VID_046D&PID_C215`). It takes over from the inbox `hidusb`, reads the stick's 7-byte reports itself, and runs them through the configurable pipeline in `pipeline/` (calibration, inversion, deadzones, curves, axis remap, hat-as-buttons, a shift layer, button remap). It then publishes a 32-button joystick and a vendor channel for the app. There is no kernel code, so Secure Boot and Memory Integrity (HVCI) can stay on.
 
 ## How it binds
 

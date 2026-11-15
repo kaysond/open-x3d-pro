@@ -15,7 +15,6 @@ Open-source replacement for Logitech Gaming Software 5.10 for the Logitech Extre
 - Driver C and Rust pipelines agree bit-for-bit, checked against shared vectors in `core/testdata/vectors.json`.
 - `app/`: Tauri v2 tray agent (Rust backend, React + TypeScript UI) that edits profiles and pushes them to the driver.
 - Profiles switch on the foreground or running executable; the NSIS installer adds the driver via `pnputil`.
-- Interfaces and layout: [docs/CONTRACT.md](docs/CONTRACT.md). Background and design rationale: [docs/research.md](docs/research.md).
 
 ## Repository layout
 
@@ -34,7 +33,6 @@ Open-source replacement for Logitech Gaming Software 5.10 for the Logitech Extre
 │   ├── src/                React + TypeScript + Vite frontend
 │   └── ...
 ├── .github/workflows/      ci.yml, build.yml, nightly.yml, release.yml
-├── docs/                   CONTRACT.md, research.md
 ├── README.md, LICENSE (MIT), .gitignore, .editorconfig
 ```
 

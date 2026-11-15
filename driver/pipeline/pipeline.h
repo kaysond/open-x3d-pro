@@ -1,5 +1,5 @@
 /* Open X3D Pro: axis/button pipeline shared by the UMDF driver and the host test.
- * Pure C, no WDF/Windows headers. Spec: docs/CONTRACT.md section 4. */
+ * Pure C, no WDF/Windows headers. Spec: CONTRACT section 4. */
 #ifndef OPENX3D_PIPELINE_H
 #define OPENX3D_PIPELINE_H
 

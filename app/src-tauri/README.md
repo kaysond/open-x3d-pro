@@ -1,6 +1,6 @@
 # Open X3D Pro: Tauri backend
 
-Rust side of the tray agent (`open-x3d-pro.exe`). It manages profiles, follows the foreground or running app, pushes config blobs to the driver, and streams live input to the UI. Interfaces are defined in [`docs/CONTRACT.md`](../../docs/CONTRACT.md) §5 and §6.
+Rust side of the tray agent (`open-x3d-pro.exe`). It manages profiles, follows the foreground or running app, pushes config blobs to the driver, and streams live input to the UI.
 
 ## Running
 
