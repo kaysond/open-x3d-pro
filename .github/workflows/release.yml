@@ -1,7 +1,7 @@
 name: Release
 
-# Two ways in. "Run workflow" on main with a version: `bump` writes the version files, tags and
-# starts this workflow again on the tag. On a tag (from `bump`, or pushed by hand): check, build, publish.
+# Two ways in. "Run workflow" on main with a version: `bump` writes the version files and pushes a tag,
+# which starts this workflow again. On a tag (from `bump`, or pushed by hand): check, build, publish.
 on:
   push:
     tags: ['v*']
@@ -19,13 +19,14 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
-      actions: write
+      contents: read
     env:
       VERSION: ${{ inputs.version }}
-      GH_TOKEN: ${{ github.token }}
     steps:
+      # Pushes with a deploy key: it can bypass main's ruleset and, unlike the workflow token, its tag push starts the release run.
       - uses: actions/checkout@v7
+        with:
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Write the version files
         run: |
@@ -56,8 +57,7 @@ jobs:
           sed -i -E "s|^(#define X3D_DRIVER_VERSION_BCD ).*|\1$bcd /* $base */|" driver/openx3d/device.h
           git diff --stat
 
-      # A tag pushed with the workflow token starts no workflow, so the release run is started explicitly.
-      - name: Commit, tag and start the release
+      - name: Commit and tag
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
@@ -65,7 +65,6 @@ jobs:
           git commit -am "chore(release): v$VERSION"
           git tag "v$VERSION"
           git push --atomic origin HEAD:main "v$VERSION"
-          gh workflow run release.yml --ref "v$VERSION"
 
   check:
     if: github.ref_type == 'tag'

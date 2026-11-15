@@ -52,13 +52,26 @@ Artifacts need a signed-in GitHub account.
 
 ## `release.yml` (Run workflow on `main`, or tag `v*`)
 
-0. `bump` (only when started with **Run workflow** on `main`): writes the version to `Cargo.toml` and `Cargo.lock`, `app/package.json` and its lock file, the INF `DriverVer` (with today's date), every version field of `openx3d.rc` and `X3D_DRIVER_VERSION_BCD` in `device.h`; commits `chore(release): vX.Y.Z` to `main`, tags it and starts this workflow again on the tag. The jobs below then run on the tag, so a release's attestation still names `refs/tags/vX.Y.Z`.
+0. `bump` (only when started with **Run workflow** on `main`): writes the version to `Cargo.toml` and `Cargo.lock`, `app/package.json` and its lock file, the INF `DriverVer` (with today's date), every version field of `openx3d.rc` and `X3D_DRIVER_VERSION_BCD` in `device.h`; commits `chore(release): vX.Y.Z` to `main` and tags it, pushing both with the `RELEASE_DEPLOY_KEY` deploy key; the tag push starts this workflow again. The jobs below then run on the tag, so a release's attestation still names `refs/tags/vX.Y.Z`.
 
 1. `check` (ubuntu-24.04): checks that the tagged commit is on `main` and that the tag version matches `app/package.json`, root `Cargo.toml` (which Tauri also uses), the INF `DriverVer`, the `openx3d.rc` `ProductVersion` (`a.b.c.0`) and `X3D_DRIVER_VERSION_BCD`.
 2. `build`: `build.yml` with `sign: true` and the two signing secrets.
 3. `publish` (the only job with `contents: write`, in environment `release`): GitHub Release with the artifact's files. `v0.*` tags and tags with a `-suffix` are published as pre-releases.
 
-Repository settings to set once: required reviewers on the `release` environment, a tag ruleset that limits who can create `v*` tags, and the release signing certificate.
+Repository settings to set once: required reviewers on the `release` environment, the release deploy key, a tag ruleset that limits who can create `v*` tags, and the release signing certificate.
+
+### Release deploy key
+
+`bump` pushes with a deploy key because `main`'s ruleset can exempt deploy keys but not the workflow token.
+
+```sh
+ssh-keygen -t ed25519 -N '' -C 'release bump' -f release_key
+gh repo deploy-key add release_key.pub --allow-write --title 'release bump'
+gh secret set RELEASE_DEPLOY_KEY < release_key
+shred -u release_key release_key.pub
+```
+
+Then add **Deploy keys** to the bypass list of the `main` ruleset, and of the `v*` tag ruleset if there is one.
 
 ### Release signing certificate
 
@@ -86,7 +99,7 @@ Put the fingerprint in the README and commit `cert.pem` as `release-signing-cert
 2. Actions tab, **Release**, **Run workflow** on `main`, enter the version (`0.2.0`, or `0.2.0-rc.1` for a pre-release). Or from a terminal: `gh workflow run release.yml --ref main -f version=0.2.0`.
 3. Approve the `publish` job if the `release` environment has required reviewers.
 
-The bump commit is pushed by the workflow, so it gets no CI or nightly run of its own; the release run builds it. If branch protection or a tag ruleset is added later, `github-actions[bot]` needs to be allowed to push to `main` and create `v*` tags.
+The bump commit also starts CI and the nightly on `main`.
 
 Tagging by hand still works: bump the version files yourself, merge to `main`, then `git tag v0.2.0 && git push --tags`.
 
