@@ -1,6 +1,6 @@
-/* HID report descriptor published by openx3d (CONTRACT 2.1). Byte-identical to
- * x3d_core::hid::REPORT_DESCRIPTOR in core/src/hid.rs; `make -C driver/test`
- * diffs the two. Included by hid.c only. */
+/* HID report descriptor published by openx3d (CONTRACT 2.1). The tests in
+ * core/src/hid.rs parse this array and check the app's report lengths against
+ * it, so keep one item per line with 0x-prefixed bytes. Included by hid.c only. */
 #pragma once
 
 static const UCHAR G_ReportDescriptor[] = {

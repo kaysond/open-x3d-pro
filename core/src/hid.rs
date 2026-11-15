@@ -1,4 +1,6 @@
-//! HID interface the driver publishes (CONTRACT §2.1): descriptor bytes, IDs and report codecs.
+//! HID interface the driver publishes (CONTRACT §2.1): IDs, report lengths and codecs.
+//! The descriptor itself lives in driver/openx3d/descriptor.h; the tests here check these
+//! constants against it.
 
 pub use crate::blob::BLOB_LEN;
 use crate::pipeline::JoyReport;
@@ -20,64 +22,6 @@ pub const JOYSTICK_REPORT_LEN: usize = 14;
 pub const RAW_REPORT_LEN: usize = 11;
 pub const CONFIG_REPORT_LEN: usize = 256;
 pub const INFO_REPORT_LEN: usize = 32;
-
-/// Byte-identical to the driver's descriptor (driver/openx3d). Change both together.
-#[rustfmt::skip]
-pub const REPORT_DESCRIPTOR: &[u8] = &[
-    // Collection 1: joystick, report ID 1.
-    0x05, 0x01,                   // Usage Page (Generic Desktop)
-    0x09, 0x04,                   // Usage (Joystick)
-    0xA1, 0x01,                   // Collection (Application)
-    0x85, 0x01,                   //   Report ID (1)
-    0x09, 0x30,                   //   Usage (X)
-    0x09, 0x31,                   //   Usage (Y)
-    0x09, 0x35,                   //   Usage (Rz)
-    0x09, 0x36,                   //   Usage (Slider)
-    0x15, 0x00,                   //   Logical Minimum (0)
-    0x27, 0xFF, 0xFF, 0x00, 0x00, //   Logical Maximum (65535)
-    0x75, 0x10,                   //   Report Size (16)
-    0x95, 0x04,                   //   Report Count (4)
-    0x81, 0x02,                   //   Input (Data,Var,Abs)
-    0x09, 0x39,                   //   Usage (Hat switch)
-    0x25, 0x07,                   //   Logical Maximum (7)
-    0x35, 0x00,                   //   Physical Minimum (0)
-    0x46, 0x3B, 0x01,             //   Physical Maximum (315)
-    0x65, 0x14,                   //   Unit (Eng Rot: Degrees)
-    0x75, 0x04,                   //   Report Size (4)
-    0x95, 0x01,                   //   Report Count (1)
-    0x81, 0x42,                   //   Input (Data,Var,Abs,Null)
-    0x45, 0x00,                   //   Physical Maximum (0)
-    0x65, 0x00,                   //   Unit (None)
-    0x81, 0x03,                   //   Input (Const,Var,Abs): 4-bit pad
-    0x05, 0x09,                   //   Usage Page (Button)
-    0x19, 0x01,                   //   Usage Minimum (1)
-    0x29, 0x20,                   //   Usage Maximum (32)
-    0x25, 0x01,                   //   Logical Maximum (1)
-    0x75, 0x01,                   //   Report Size (1)
-    0x95, 0x20,                   //   Report Count (32)
-    0x81, 0x02,                   //   Input (Data,Var,Abs)
-    0xC0,                         // End Collection
-    // Collection 2: vendor channel.
-    0x06, 0x00, 0xFF,             // Usage Page (Vendor 0xFF00)
-    0x09, 0x01,                   // Usage (0x01)
-    0xA1, 0x01,                   // Collection (Application)
-    0x85, 0x02,                   //   Report ID (2)
-    0x09, 0x01,                   //   Usage (0x01)
-    0x15, 0x00,                   //   Logical Minimum (0)
-    0x26, 0xFF, 0x00,             //   Logical Maximum (255)
-    0x75, 0x08,                   //   Report Size (8)
-    0x95, 0x0A,                   //   Report Count (10)
-    0x81, 0x02,                   //   Input (Data,Var,Abs): raw[7], seq u16, flags u8
-    0x85, 0x03,                   //   Report ID (3)
-    0x09, 0x02,                   //   Usage (0x02)
-    0x95, 0xFF,                   //   Report Count (255)
-    0xB1, 0x02,                   //   Feature (Data,Var,Abs): config blob
-    0x85, 0x04,                   //   Report ID (4)
-    0x09, 0x03,                   //   Usage (0x03)
-    0x95, 0x1F,                   //   Report Count (31)
-    0xB1, 0x02,                   //   Feature (Data,Var,Abs): driver info
-    0xC0,                         // End Collection
-];
 
 /// Input report 2 from the vendor collection (its trailing flags byte is unused by the app).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,6 +106,17 @@ mod tests {
     /// Data bits per (main item tag, report ID).
     type ReportBits = BTreeMap<(u8, u8), u32>;
 
+    /// The driver's report descriptor bytes, read from its C header.
+    fn driver_descriptor() -> Vec<u8> {
+        let src = include_str!("../../driver/openx3d/descriptor.h");
+        let (_, rest) = src.split_once("G_ReportDescriptor[] = {").unwrap();
+        let (body, _) = rest.split_once("};").unwrap();
+        body.lines()
+            .flat_map(|l| l.split("/*").next().unwrap_or("").split(','))
+            .filter_map(|t| u8::from_str_radix(t.trim().strip_prefix("0x")?, 16).ok())
+            .collect()
+    }
+
     /// Walks short items; returns report sizes and the top-level collections' (page, usage).
     fn walk(desc: &[u8]) -> (ReportBits, Vec<(u32, u32)>) {
         let (mut size, mut count, mut id, mut page, mut usage) = (0u32, 0u32, 0u8, 0u32, 0u32);
@@ -201,7 +156,9 @@ mod tests {
 
     #[test]
     fn descriptor_report_sizes() {
-        let (bits, tops) = walk(REPORT_DESCRIPTOR);
+        let desc = driver_descriptor();
+        assert_eq!(desc.len(), 106);
+        let (bits, tops) = walk(&desc);
         assert_eq!(
             tops,
             vec![

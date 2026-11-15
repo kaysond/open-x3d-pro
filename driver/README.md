@@ -13,7 +13,7 @@ USB\VID_046D&PID_C215      the stick (low speed, 10 ms interrupt-IN, 7-byte repo
 
 `openx3d.inf` matches the USB device node (`&REV_0204` ranks 0x00FF0000, plain ID 0x00FF0001), so it outranks inbox `input.inf` (0x00FF2005 on Win11) and LGS's `WmJoy.HidDevice`. The device is never sent a class request, because it stalls GET_REPORT/GET_FEATURE.
 
-The driver publishes its own report descriptor (`openx3d/descriptor.h`, kept byte-identical to `core/src/hid.rs`), so hidclass enumerates two collections:
+The driver publishes its own report descriptor (`openx3d/descriptor.h`, which the tests in `core/src/hid.rs` parse to check the app's report lengths), so hidclass enumerates two collections:
 
 | Node | Collection | Reports | Bound by |
 |---|---|---|---|
@@ -31,7 +31,7 @@ READ_REPORT policy: hidclass keeps a few reads pending per device. On every USB 
 | Path | What |
 |---|---|
 | `pipeline/pipeline.{h,c}` | Pure C11 pipeline and blob validation, shared by the driver and the host test |
-| `test/` | Host test: `make` runs `core/testdata/vectors.json` and checks that the descriptor copies match |
+| `test/` | Host test: `make` runs `core/testdata/vectors.json` |
 | `openx3d/` | UMDF driver: `driver.c` (entry, device add), `device.c` (state, read policy), `usb.c`, `hid.c` (IOCTLs), `registry.c`, `descriptor.h`, `openx3d.inf`, `openx3d.vcxproj`, `openx3d.rc` |
 | `scripts/` | `package.ps1` (stage + Inf2Cat), `sign-catalog.ps1` (on-PC catalog signing, embedded in and run by the app installer) |
 
