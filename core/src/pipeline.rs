@@ -202,18 +202,7 @@ pub fn process(cfg: &CompiledConfig, raw: &[u8; 7]) -> JoyReport {
 mod tests {
     use super::*;
     use crate::config::{AxisId, Calibration, DeviceConfig, HatMode};
-
-    fn frame(x: u16, y: u16, hat: u8, rz: u8, slider: u8, buttons: u16) -> [u8; 7] {
-        RawReport {
-            x,
-            y,
-            rz,
-            slider,
-            hat,
-            buttons,
-        }
-        .to_bytes()
-    }
+    use crate::vectors::frame;
 
     fn run(cfg: &DeviceConfig, raw: [u8; 7]) -> JoyReport {
         cfg.validate().unwrap();

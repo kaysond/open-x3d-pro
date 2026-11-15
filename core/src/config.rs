@@ -12,20 +12,9 @@ pub enum AxisId {
 }
 
 impl AxisId {
-    /// Blob/pipeline order.
-    pub const ALL: [AxisId; 4] = [AxisId::X, AxisId::Y, AxisId::Rz, AxisId::Slider];
-
+    /// Position in blob/pipeline order.
     pub fn index(self) -> usize {
         self as usize
-    }
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            AxisId::X => "x",
-            AxisId::Y => "y",
-            AxisId::Rz => "rz",
-            AxisId::Slider => "slider",
-        }
     }
 }
 
@@ -157,7 +146,7 @@ pub struct Axes {
 }
 
 impl Axes {
-    /// In [`AxisId::ALL`] order.
+    /// In X, Y, Rz, Slider order.
     pub fn all(&self) -> [&AxisConfig; 4] {
         [&self.x, &self.y, &self.rz, &self.slider]
     }
@@ -220,9 +209,8 @@ impl Default for DeviceConfig {
 
 impl DeviceConfig {
     pub fn validate(&self) -> Result<(), String> {
-        for (id, axis) in AxisId::ALL.iter().zip(self.axes.all()) {
-            axis.validate()
-                .map_err(|e| format!("axis {}: {e}", id.as_str()))?;
+        for (name, axis) in ["x", "y", "rz", "slider"].iter().zip(self.axes.all()) {
+            axis.validate().map_err(|e| format!("axis {name}: {e}"))?;
         }
         let physical = 1..=PHYSICAL_BUTTONS as u8;
         for (i, b) in self.buttons.iter().chain(&self.buttons_shifted).enumerate() {
