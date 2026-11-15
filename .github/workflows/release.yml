@@ -69,9 +69,6 @@ jobs:
   check:
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        shell: pwsh
     steps:
       - uses: actions/checkout@v7
         with:
@@ -79,36 +76,34 @@ jobs:
 
       - name: Check the tag is on main
         run: |
-          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error::$env:GITHUB_REF_NAME ($env:GITHUB_SHA) is not on main"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main"
             exit 1
-          }
+          fi
 
       - name: Check versions match tag
         run: |
-          $version = $env:GITHUB_REF_NAME -replace '^v'
-          $cargo = Get-Content Cargo.toml -Raw
-          $inf = Get-Content driver/openx3d/openx3d.inf -Raw
-          $rc = Get-Content driver/openx3d/openx3d.rc -Raw
-          $h = Get-Content driver/openx3d/device.h -Raw
-          $hex = { param($s) [Convert]::ToInt32($s, 16) }
-          # @(file, found, expected); DriverVer is numeric a.b.c.d, so compare a.b.c against the tag without any -suffix.
-          $checks = @(
-            @('app/package.json version', (Get-Content app/package.json -Raw | ConvertFrom-Json).version, $version),
-            @('Cargo.toml [workspace.package] version', $(if ($cargo -match '(?s)\[workspace\.package\](.*?)(?=\n\[|$)' -and $Matches[1] -match '(?m)^version\s*=\s*"([^"]+)"') { $Matches[1] }), $version),
-            @('driver/openx3d/openx3d.inf DriverVer', $(if ($inf -match 'DriverVer\s*=\s*[^,]+,\s*([\d.]+)') { $Matches[1].Split('.')[0..2] -join '.' }), ($version -split '-')[0]),
-            @('driver/openx3d/openx3d.rc ProductVersion', $(if ($rc -match 'VALUE\s+"ProductVersion",\s*"([^"]+)"') { $Matches[1] }), "$(($version -split '-')[0]).0"),
-            @('driver/openx3d/device.h X3D_DRIVER_VERSION_BCD', $(if ($h -match 'X3D_DRIVER_VERSION_BCD\s+0x([0-9A-Fa-f]{2})([0-9A-Fa-f])([0-9A-Fa-f])') { "$(& $hex $Matches[1]).$(& $hex $Matches[2]).$(& $hex $Matches[3])" }), ($version -split '-')[0])
-          )
-          $failed = $false
-          foreach ($c in $checks) {
-            if ($c[1] -ne $c[2]) {
-              Write-Output "::error::$($c[0]) is '$($c[1])' but tag $env:GITHUB_REF_NAME requires '$($c[2])'"
-              $failed = $true
-            }
+          set -euo pipefail
+          version=${GITHUB_REF_NAME#v}
+          # DriverVer, the RC and the BCD are numeric, so they compare against the tag without any -suffix.
+          base=${version%%-*}
+          failed=0
+          check() { # name found expected
+            if [[ $2 != "$3" ]]; then
+              echo "::error::$1 is '$2' but tag $GITHUB_REF_NAME requires '$3'"
+              failed=1
+            fi
           }
-          if ($failed) { exit 1 }
+          check 'app/package.json version' "$(jq -r .version app/package.json)" "$version"
+          check 'Cargo.toml [workspace.package] version' \
+            "$(awk -F'"' '/^\[/ { s = /^\[workspace\.package\]/ } s && /^version *=/ { print $2; exit }' Cargo.toml)" "$version"
+          check 'driver/openx3d/openx3d.inf DriverVer' \
+            "$(sed -nE 's/^DriverVer[[:space:]]*=[^,]*,[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' driver/openx3d/openx3d.inf)" "$base"
+          check 'driver/openx3d/openx3d.rc ProductVersion' \
+            "$(sed -nE 's/.*VALUE[[:space:]]+"ProductVersion",[[:space:]]*"([^"]+)".*/\1/p' driver/openx3d/openx3d.rc)" "$base.0"
+          read -r a b c < <(sed -nE 's/.*X3D_DRIVER_VERSION_BCD[[:space:]]+0x([0-9A-Fa-f]{2})([0-9A-Fa-f])([0-9A-Fa-f]).*/\1 \2 \3/p' driver/openx3d/device.h) || true
+          check 'driver/openx3d/device.h X3D_DRIVER_VERSION_BCD' "${a:+$((16#$a)).$((16#$b)).$((16#$c))}" "$base"
+          exit $failed
 
   build:
     needs: check
@@ -131,9 +126,6 @@ jobs:
     environment: release
     permissions:
       contents: write
-    defaults:
-      run:
-        shell: pwsh
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -144,42 +136,42 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          $fence = '```'
-          $sums = (Get-Content assets/SHA256SUMS.txt) -join "`n"
-          @"
+          set -euo pipefail
+          repo_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY
+          cat > release-notes.md <<EOF
           Open-source replacement for Logitech Gaming Software for the Logitech Extreme 3D Pro joystick.
           The driver runs in user mode (UMDF 2, no kernel code), so **Memory Integrity (HVCI) and Secure Boot can stay on**.
 
           ### Install
 
           1. Recommended: uninstall Logitech Gaming Software first.
-          2. Download **Open-X3D-Pro_$($env:VERSION)_x64-setup.exe** below and run it (administrator rights needed; it installs the app and, if you tick the box, the driver).
+          2. Download **Open-X3D-Pro_${VERSION}_x64-setup.exe** below and run it (administrator rights needed; it installs the app and, if you tick the box, the driver).
           3. Unplug and replug the joystick, or reboot if the installer asks.
 
           ### Signing and provenance
 
-          The installer is signed with the project's self-signed certificate, which Windows does not know, so SmartScreen still shows "Windows protected your PC": choose **More info**, then **Run anyway**. Check the download first: compare the signature's certificate with the [fingerprint in the README]($($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)#verifying-a-download), and verify the GitHub build-provenance attestation that every file below has, proving it was built from this tag by this repository's release workflow: ``gh attestation verify <file> --repo $($env:GITHUB_REPOSITORY) --source-ref refs/tags/$($env:GITHUB_REF_NAME) --signer-workflow $($env:GITHUB_REPOSITORY)/.github/workflows/build.yml``. If you tick the box in the installer, the driver is signed on your PC by a certificate created there, whose private key is deleted immediately. Details: [Driver signing]($($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)#driver-signing).
+          The installer is signed with the project's self-signed certificate, which Windows does not know, so SmartScreen still shows "Windows protected your PC": choose **More info**, then **Run anyway**. Check the download first: compare the signature's certificate with the [fingerprint in the README]($repo_url#verifying-a-download), and verify the GitHub build-provenance attestation that every file below has, proving it was built from this tag by this repository's release workflow: \`\`gh attestation verify <file> --repo $GITHUB_REPOSITORY --source-ref refs/tags/$GITHUB_REF_NAME --signer-workflow $GITHUB_REPOSITORY/.github/workflows/build.yml\`\`. If you tick the box in the installer, the driver is signed on your PC by a certificate created there, whose private key is deleted immediately. Details: [Driver signing]($repo_url#driver-signing).
 
           ### SHA-256
 
-          $fence
-          $sums
-          $fence
-          "@ | Set-Content release-notes.md
+          \`\`\`
+          $(cat assets/SHA256SUMS.txt)
+          \`\`\`
+          EOF
 
-      # gh is preinstalled; re-runs replace the assets of an existing release.
-      - name: Publish GitHub Release
+      # Immutable releases lock assets once published, and this action publishes prereleases before uploading, so upload to a draft first.
+      - name: Upload to draft release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          name: Open X3D Pro ${{ github.ref_name }}
+          body_path: release-notes.md
+          generate_release_notes: true
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
+          draft: true
+          files: assets/*
+          fail_on_unmatched_files: true
+
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          $files = (Get-ChildItem assets -File).FullName
-          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $env:TAG @files --repo $env:GITHUB_REPOSITORY --clobber
-          } else {
-            $pre = if ($env:TAG.StartsWith('v0.') -or $env:TAG.Contains('-')) { @('--prerelease') } else { @() }
-            gh release create $env:TAG @files --repo $env:GITHUB_REPOSITORY --verify-tag `
-              --title "Open X3D Pro $env:TAG" --notes-file release-notes.md --generate-notes @pre
-          }
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
