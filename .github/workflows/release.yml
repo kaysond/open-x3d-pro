@@ -1,14 +1,74 @@
 name: Release
 
+# Two ways in. "Run workflow" on main with a version: `bump` writes the version files, tags and
+# starts this workflow again on the tag. On a tag (from `bump`, or pushed by hand): check, build, publish.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release from main, e.g. 0.2.0 or 0.2.0-rc.1
+        type: string
 
 permissions:
   contents: read
 
 jobs:
+  bump:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write the version files
+        run: |
+          set -euo pipefail
+          if ! [[ $VERSION =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::version '$VERSION' must look like 1.2.3 or 1.2.3-rc.1"; exit 1
+          fi
+          major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
+          base=$major.$minor.$patch
+          # The driver reports its version as BCD: one byte major, one nibble each for minor and patch.
+          if ((major > 255 || minor > 15 || patch > 15)); then
+            echo "::error::X3D_DRIVER_VERSION_BCD holds at most 255.15.15"; exit 1
+          fi
+          bcd=$(printf '0x%02X%X%X' "$major" "$minor" "$patch")
+
+          sed -i -E "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          # Cargo.lock; needs the toolchain pinned in rust-toolchain.toml.
+          rustup toolchain install
+          cargo update --workspace
+          (cd app && npm version "$VERSION" --no-git-tag-version --allow-same-version)
+          # The INF is checked out with CRLF; [^\r]* keeps the line ending.
+          sed -i -E "s|^(DriverVer[[:space:]]*=[[:space:]]*)[^\r]*|\1$(date -u +%m/%d/%Y),$base.0|" driver/openx3d/openx3d.inf
+          sed -i -E \
+            -e "s/^( FILEVERSION +).*/\1$major,$minor,$patch,0/" \
+            -e "s/^( PRODUCTVERSION +).*/\1$major,$minor,$patch,0/" \
+            -e "s/(VALUE \"(File|Product)Version\", +)\"[^\"]*\"/\1\"$base.0\"/" \
+            driver/openx3d/openx3d.rc
+          sed -i -E "s|^(#define X3D_DRIVER_VERSION_BCD ).*|\1$bcd /* $base */|" driver/openx3d/device.h
+          git diff --stat
+
+      # A tag pushed with the workflow token starts no workflow, so the release run is started explicitly.
+      - name: Commit, tag and start the release
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "chore(release): v$VERSION"
+          git tag "v$VERSION"
+          git push --atomic origin HEAD:main "v$VERSION"
+          gh workflow run release.yml --ref "v$VERSION"
+
   check:
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -32,12 +92,15 @@ jobs:
           $cargo = Get-Content Cargo.toml -Raw
           $inf = Get-Content driver/openx3d/openx3d.inf -Raw
           $rc = Get-Content driver/openx3d/openx3d.rc -Raw
+          $h = Get-Content driver/openx3d/device.h -Raw
+          $hex = { param($s) [Convert]::ToInt32($s, 16) }
           # @(file, found, expected); DriverVer is numeric a.b.c.d, so compare a.b.c against the tag without any -suffix.
           $checks = @(
             @('app/package.json version', (Get-Content app/package.json -Raw | ConvertFrom-Json).version, $version),
             @('Cargo.toml [workspace.package] version', $(if ($cargo -match '(?s)\[workspace\.package\](.*?)(?=\n\[|$)' -and $Matches[1] -match '(?m)^version\s*=\s*"([^"]+)"') { $Matches[1] }), $version),
             @('driver/openx3d/openx3d.inf DriverVer', $(if ($inf -match 'DriverVer\s*=\s*[^,]+,\s*([\d.]+)') { $Matches[1].Split('.')[0..2] -join '.' }), ($version -split '-')[0]),
-            @('driver/openx3d/openx3d.rc ProductVersion', $(if ($rc -match 'VALUE\s+"ProductVersion",\s*"([^"]+)"') { $Matches[1] }), "$(($version -split '-')[0]).0")
+            @('driver/openx3d/openx3d.rc ProductVersion', $(if ($rc -match 'VALUE\s+"ProductVersion",\s*"([^"]+)"') { $Matches[1] }), "$(($version -split '-')[0]).0"),
+            @('driver/openx3d/device.h X3D_DRIVER_VERSION_BCD', $(if ($h -match 'X3D_DRIVER_VERSION_BCD\s+0x([0-9A-Fa-f]{2})([0-9A-Fa-f])([0-9A-Fa-f])') { "$(& $hex $Matches[1]).$(& $hex $Matches[2]).$(& $hex $Matches[3])" }), ($version -split '-')[0])
           )
           $failed = $false
           foreach ($c in $checks) {

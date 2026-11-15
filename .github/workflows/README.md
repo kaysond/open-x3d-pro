@@ -50,9 +50,11 @@ Artifacts need a signed-in GitHub account.
 - Browser: Actions, Nightly, open the run, **Artifacts** at the bottom.
 - CLI: `gh run download --repo kaysond/open-x3d-pro -n open-x3d-pro-nightly-<sha7>` (searches all runs; add a run id to pick one).
 
-## `release.yml` (tag `v*`)
+## `release.yml` (Run workflow on `main`, or tag `v*`)
 
-1. `check` (ubuntu-24.04): checks that the tagged commit is on `main` and that the tag version matches `app/package.json`, root `Cargo.toml` (which Tauri also uses), the INF `DriverVer` and the `openx3d.rc` `ProductVersion` (`a.b.c.0`).
+0. `bump` (only when started with **Run workflow** on `main`): writes the version to `Cargo.toml` and `Cargo.lock`, `app/package.json` and its lock file, the INF `DriverVer` (with today's date), every version field of `openx3d.rc` and `X3D_DRIVER_VERSION_BCD` in `device.h`; commits `chore(release): vX.Y.Z` to `main`, tags it and starts this workflow again on the tag. The jobs below then run on the tag, so a release's attestation still names `refs/tags/vX.Y.Z`.
+
+1. `check` (ubuntu-24.04): checks that the tagged commit is on `main` and that the tag version matches `app/package.json`, root `Cargo.toml` (which Tauri also uses), the INF `DriverVer`, the `openx3d.rc` `ProductVersion` (`a.b.c.0`) and `X3D_DRIVER_VERSION_BCD`.
 2. `build`: `build.yml` with `sign: true` and the two signing secrets.
 3. `publish` (the only job with `contents: write`, in environment `release`): GitHub Release with the artifact's files. `v0.*` tags and tags with a `-suffix` are published as pre-releases.
 
@@ -80,8 +82,13 @@ Put the fingerprint in the README and commit `cert.pem` as `release-signing-cert
 
 ## Cutting a release
 
-1. Bump the version in all five places above, merge to `main`, wait for CI and the nightly.
-2. `git tag v0.1.0 && git push --tags`.
+1. Wait for CI and the nightly on `main`.
+2. Actions tab, **Release**, **Run workflow** on `main`, enter the version (`0.2.0`, or `0.2.0-rc.1` for a pre-release). Or from a terminal: `gh workflow run release.yml --ref main -f version=0.2.0`.
+3. Approve the `publish` job if the `release` environment has required reviewers.
+
+The bump commit is pushed by the workflow, so it gets no CI or nightly run of its own; the release run builds it. If branch protection or a tag ruleset is added later, `github-actions[bot]` needs to be allowed to push to `main` and create `v*` tags.
+
+Tagging by hand still works: bump the version files yourself, merge to `main`, then `git tag v0.2.0 && git push --tags`.
 
 ## Re-running
 

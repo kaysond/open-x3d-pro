@@ -1,7 +1,7 @@
 # Open X3D Pro: codebase walkthrough
 
 A tour of every tracked file, in the order that makes the architecture easiest to absorb.
-Written against `main` @ e190f23.
+Written against `main` @ e190f23, plus the release workflow change that followed.
 
 ## The 60-second picture
 
@@ -357,9 +357,12 @@ and events; in a plain browser it runs against an in-memory mock.
   optionally signs the installer, writes checksums, and attests provenance in a separate job.
 - [.github/workflows/nightly.yml](.github/workflows/nightly.yml): calls `build.yml` on every
   push to `main`, unsigned.
-- [.github/workflows/release.yml](.github/workflows/release.yml): on `v*` tags. Checks the
-  tag is on `main` and that all version numbers match it, calls `build.yml` with signing,
-  then publishes a GitHub release behind the `release` environment.
+- [.github/workflows/release.yml](.github/workflows/release.yml): the release button.
+  Started with **Run workflow** on `main` and a version, its `bump` job writes every
+  version file, commits, tags and restarts the workflow on the tag. On a `v*` tag (from
+  `bump`, or pushed by hand) it checks the tag is on `main` and that all version numbers
+  match it, calls `build.yml` with signing, then publishes a GitHub release behind the
+  `release` environment.
 - [.github/dependabot.yml](.github/dependabot.yml): one grouped weekly PR for cargo, npm and
   actions, with a 7-day cooldown and no major bumps.
 - [.github/CODEOWNERS](.github/CODEOWNERS): single owner for everything.
@@ -394,7 +397,7 @@ and events; in a plain browser it runs against an in-memory mock.
 | HID descriptor / reports | `driver/openx3d/descriptor.h`, the lengths and codecs in `core/src/hid.rs` |
 | Config or IPC types | `core/src/config.rs` (or `state.rs`), `app/src/types.ts`, `app/src/lib/mock.ts` |
 | A Tauri command | `commands.rs`, handler list in `lib.rs`, `ipc.ts`, `mock.ts` |
-| Version | `Cargo.toml`, `app/package.json`, `openx3d.inf`, `openx3d.rc`, `device.h` (`X3D_DRIVER_VERSION_BCD`) |
+| Version | nothing by hand: the `bump` job in `release.yml` writes `Cargo.toml`, `app/package.json`, `openx3d.inf`, `openx3d.rc` and `device.h` (`X3D_DRIVER_VERSION_BCD`) |
 
 ## Commands
 
