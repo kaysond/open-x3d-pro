@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cx } from '../components/controls';
 import { api } from '../lib/ipc';
 import { guard, useStore } from '../store';
@@ -18,40 +18,36 @@ function download(name: string, text: string) {
 
 function RunningAppsModal({ onPick, onClose }: { onPick: (exePath: string) => void; onClose: () => void }) {
   const [windows, setWindows] = useState<WindowInfo[] | null>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
+    // StrictMode runs effects twice; showModal throws on an open dialog in older WebView2.
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
     void guard(async () => {
       setWindows(await api.listWindows());
     });
   }, []);
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div
-        className={styles.modal}
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <h2>Add running app</h2>
-        {windows === null && <p className={styles.muted}>Loading…</p>}
-        {windows?.length === 0 && <p className={styles.muted}>No windows found.</p>}
-        <ul className={styles.list}>
-          {windows?.map((w) => (
-            <li key={`${w.pid}-${w.title}`}>
-              <button
-                className={styles.listItem}
-                onClick={() => {
-                  onPick(w.exePath);
-                }}
-              >
-                <strong>{w.title || '(untitled)'}</strong>
-                <span className={cx(styles.muted, styles.mono)}>{w.exePath}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <button onClick={onClose}>Close</button>
-      </div>
-    </div>
+    <dialog ref={dialog} className={styles.modal} onClose={onClose}>
+      <h2>Add running app</h2>
+      {windows === null && <p className={styles.muted}>Loading…</p>}
+      {windows?.length === 0 && <p className={styles.muted}>No windows found.</p>}
+      <ul className={styles.list}>
+        {windows?.map((w) => (
+          <li key={`${w.pid}-${w.title}`}>
+            <button
+              className={styles.listItem}
+              onClick={() => {
+                onPick(w.exePath);
+              }}
+            >
+              <strong>{w.title || '(untitled)'}</strong>
+              <span className={cx(styles.muted, styles.mono)}>{w.exePath}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button onClick={onClose}>Close</button>
+    </dialog>
   );
 }
 

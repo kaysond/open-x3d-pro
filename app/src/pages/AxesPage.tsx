@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { cx, Radio, Select, Slider, Toggle } from '../components/controls';
 import { CurveEditor } from '../components/CurveEditor';
 import { api } from '../lib/ipc';
-import { axisInput, curveAt, toRaw16 } from '../lib/pipeline';
+import { axisInput, clamp, curveAt, toRaw16 } from '../lib/pipeline';
 import { guard, useStore } from '../store';
 import styles from '../styles/ui.module.css';
 import type { AxisConfig, AxisId, Calibration, Curve } from '../types';
@@ -90,9 +90,11 @@ export function AxesPage() {
     // There is no cancel command; finishing and dropping the result (or error) is the cancel.
     api.finishCalibration(axis).catch(() => undefined);
   };
+  const dzLabel = (key: 'center' | 'min' | 'max') =>
+    key === 'center' ? 'Centre deadzone' : `Deadzone at ${symmetric ? key : key === 'min' ? 'low' : 'high'} end`;
   const setCal = (key: keyof Calibration, value: number) => {
     edit((a) => {
-      a.calibration[key] = Math.round(Math.min(Math.max(value, 0), 65535));
+      a.calibration[key] = Math.round(clamp(value, 0, 65535));
     });
   };
 
@@ -190,44 +192,24 @@ export function AxesPage() {
                 });
               }}
             />
-            {symmetric && (
-              <Slider
-                label="Centre deadzone"
-                value={cfg.deadzone.center}
-                min={0}
-                max={DZ_MAX}
-                format={pct}
-                onChange={(v) => {
-                  edit((a) => {
-                    a.deadzone.center = v;
-                  });
-                }}
-              />
+            {(['center', 'min', 'max'] as const).map(
+              (key) =>
+                (symmetric || key !== 'center') && (
+                  <Slider
+                    key={key}
+                    label={dzLabel(key)}
+                    value={cfg.deadzone[key]}
+                    min={0}
+                    max={DZ_MAX}
+                    format={pct}
+                    onChange={(v) => {
+                      edit((a) => {
+                        a.deadzone[key] = v;
+                      });
+                    }}
+                  />
+                ),
             )}
-            <Slider
-              label={symmetric ? 'Deadzone at min end' : 'Deadzone at low end'}
-              value={cfg.deadzone.min}
-              min={0}
-              max={DZ_MAX}
-              format={pct}
-              onChange={(v) => {
-                edit((a) => {
-                  a.deadzone.min = v;
-                });
-              }}
-            />
-            <Slider
-              label={symmetric ? 'Deadzone at max end' : 'Deadzone at high end'}
-              value={cfg.deadzone.max}
-              min={0}
-              max={DZ_MAX}
-              format={pct}
-              onChange={(v) => {
-                edit((a) => {
-                  a.deadzone.max = v;
-                });
-              }}
-            />
             <Slider
               label="Sensitivity"
               value={cfg.sensitivity}

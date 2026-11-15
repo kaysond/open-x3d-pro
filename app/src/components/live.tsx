@@ -1,3 +1,4 @@
+import { clamp } from '../lib/pipeline';
 import styles from '../styles/ui.module.css';
 import { cx } from './controls';
 
@@ -10,7 +11,7 @@ interface AxisBarProps {
 }
 
 export function AxisBar({ label, value, max, centered = false }: AxisBarProps) {
-  const pct = Math.min(Math.max(value / max, 0), 1) * 100;
+  const pct = clamp(value / max, 0, 1) * 100;
   const fill = centered ? { left: `${Math.min(pct, 50)}%`, width: `${Math.abs(pct - 50)}%` } : { width: `${pct}%` };
   return (
     <div className={styles.axisBar}>

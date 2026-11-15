@@ -2,7 +2,7 @@
 import type { AppState, AxisId, DeviceConfig, InputFrame, Profile, Settings } from '../types';
 import { AXES, defaultDeviceConfig } from '../types';
 import type { Commands, Events, Transport } from './ipc';
-import { processFrame, toRaw16 } from './pipeline';
+import { processAxis, toRaw16 } from './pipeline';
 
 const DCS_EXE = 'C:\\Program Files\\Eagle Dynamics\\DCS World\\bin\\DCS.exe';
 
@@ -81,8 +81,11 @@ export function createMockTransport(): Transport {
       }
     }
     const config = preview ?? active()?.config ?? defaultDeviceConfig();
+    // ponytail: only per-axis curves are mocked; port targets, button maps and hat modes here if browser-only dev needs them.
+    const out = (id: AxisId) => processAxis(config.axes[id], toRaw16(id, raw[id]));
+    const processed = { ...raw, x: out('x'), y: out('y'), rz: out('rz'), slider: out('slider') };
     // seq mimics the device's 100 Hz u16 report counter.
-    emit('input', { raw, processed: processFrame(config, raw), seq: Math.floor(t * 100) & 0xffff });
+    emit('input', { raw, processed, seq: Math.floor(t * 100) & 0xffff });
   };
   let timer: ReturnType<typeof setInterval> | undefined;
 

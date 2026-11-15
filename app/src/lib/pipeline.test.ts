@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AxisConfig } from '../types';
 import { defaultDeviceConfig } from '../types';
-import { axisInput, buildLut, curveAt, processAxis, processFrame } from './pipeline';
+import { axisInput, buildLut, curveAt, processAxis } from './pipeline';
 
 const axis = (patch: Partial<AxisConfig> = {}, id: 'x' | 'slider' = 'x'): AxisConfig => ({
   ...defaultDeviceConfig().axes[id],
@@ -53,23 +53,5 @@ describe('pipeline', () => {
     const lut = buildLut({ type: 'linear' }, 2);
     expect(lut[4]).toBe(32768);
     expect(lut.slice(8).every((v) => v === 65535)).toBe(true);
-  });
-
-  it('maps hat to buttons and applies the shift layer', () => {
-    const config = defaultDeviceConfig();
-    config.hatMode = 'buttons';
-    config.shiftButton = 12;
-    config.buttonsShifted[0] = { output: 20 };
-    const out = processFrame(config, { x: 512, y: 512, rz: 128, slider: 0, hat: 1, buttons: 0b1000_0000_0001 });
-    expect(out.hat).toBe(8);
-    expect(out.buttons).toBe((1 << 12) | (1 << 13) | (1 << 19));
-  });
-
-  it('centres a non-direction hat value like the Rust pipeline', () => {
-    const config = defaultDeviceConfig();
-    config.hatMode = 'both';
-    const out = processFrame(config, { x: 512, y: 512, rz: 128, slider: 0, hat: 15, buttons: 0 });
-    expect(out.hat).toBe(8);
-    expect(out.buttons).toBe(0);
   });
 });

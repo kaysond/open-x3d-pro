@@ -180,19 +180,16 @@
   border-color: var(--accent);
 }
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgb(0 0 0 / 55%);
-  display: grid;
-  place-items: center;
-}
-
 .modal {
   composes: card;
+  color: inherit;
   max-width: 640px;
   max-height: 80vh;
   overflow: auto;
+}
+
+.modal::backdrop {
+  background: rgb(0 0 0 / 55%);
 }
 
 /* Controls */

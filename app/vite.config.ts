@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Settings follow the Tauri v2 Vite guide; array target avoids needing process.env typings.
+// Settings follow the Tauri v2 Vite guide; the target is WebView2, the only webview the app ships on.
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
@@ -10,8 +10,7 @@ export default defineConfig({
     strictPort: true,
     watch: { ignored: ['**/src-tauri/**'] },
   },
-  envPrefix: ['VITE_', 'TAURI_'],
   build: {
-    target: ['chrome105', 'safari13'],
+    target: 'chrome105',
   },
 });

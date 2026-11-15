@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { MouseEvent, PointerEvent } from 'react';
-import { buildLut, lutAt } from '../lib/pipeline';
+import { buildLut, clamp, lutAt } from '../lib/pipeline';
 import styles from '../styles/ui.module.css';
 import type { Curve } from '../types';
 
@@ -15,7 +15,6 @@ const HIT_RADIUS = 9;
 
 const px = (x: number) => PAD + x * PLOT;
 const py = (y: number) => PAD + (1 - y) * PLOT;
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
 interface CurveEditorProps {
