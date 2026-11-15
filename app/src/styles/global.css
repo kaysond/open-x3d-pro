@@ -1,12 +1,14 @@
 :root {
   color-scheme: dark;
-  --bg: #15171a;
-  --panel: #1e2125;
-  --raised: #272b30;
-  --border: #33383f;
-  --text: #d9dce1;
-  --muted: #8b929c;
-  --accent: #4c9bf5;
+  /* Neutrals and accent share the logo's hue (214deg); --brand is the logo colour itself. */
+  --bg: #121519;
+  --panel: #191d22;
+  --raised: #21252c;
+  --border: #2e353d;
+  --text: #d8dde4;
+  --muted: #89929f;
+  --accent: #6296da;
+  --brand: #1f4e8c;
   --on: #3fbf74;
   --warn: #d9a21b;
   --bad: #e0574f;

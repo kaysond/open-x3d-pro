@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import logo from '../../logo.svg';
 import { cx, Select } from './components/controls';
 import { AxesPage } from './pages/AxesPage';
 import { ButtonsPage } from './pages/ButtonsPage';
@@ -53,7 +54,10 @@ export function App() {
   return (
     <div className={styles.app}>
       <header className={styles.header}>
-        <h1>Open X3D Pro</h1>
+        <h1 className={styles.brand}>
+          <span className={styles.logo} style={{ maskImage: `url(${logo})` }} aria-hidden />
+          Open X3D Pro
+        </h1>
         <StatusBar />
         <span className={styles.grow} />
         {draft && (
