@@ -25,7 +25,7 @@ on:
         description: Name of the uploaded artifact
         value: ${{ jobs.build.outputs.artifact }}
       version:
-        description: App version from tauri.conf.json
+        description: App version from Cargo.toml
         value: ${{ jobs.build.outputs.version }}
 
 permissions:
@@ -62,15 +62,13 @@ jobs:
           cache-dependency-path: app/package-lock.json
 
       # signtool only verifies (smoke test below).
-      - name: Put signtool and Inf2Cat on PATH
+      - name: Put signtool on PATH
         run: |
-          foreach ($exe in 'x64\signtool.exe', 'x86\Inf2Cat.exe') {
-            $f = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$exe" |
-              Sort-Object { $_.VersionInfo.FileVersionRaw } -Descending | Select-Object -First 1
-            if (-not $f) { throw "$exe not found under Windows Kits\10\bin" }
-            Write-Output "Using $($f.FullName)"
-            $f.DirectoryName >> $env:GITHUB_PATH
-          }
+          $f = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object { $_.VersionInfo.FileVersionRaw } -Descending | Select-Object -First 1
+          if (-not $f) { throw 'signtool.exe not found under Windows Kits\10\bin' }
+          Write-Output "Using $($f.FullName)"
+          $f.DirectoryName >> $env:GITHUB_PATH
 
       - name: Build driver (Release x64)
         run: msbuild driver/openx3d/openx3d.vcxproj /p:Configuration=Release /p:Platform=x64 /m
@@ -124,9 +122,10 @@ jobs:
           SIGNING_PFX: ${{ secrets.SIGNING_PFX }}
           SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
         run: |
-          $version = (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           # app/src-tauri is a member of the root workspace, so the bundle lands in the root target dir.
-          $target = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory
+          $meta = cargo metadata --format-version 1 --no-deps | ConvertFrom-Json
+          $version = ($meta.packages | Where-Object name -eq 'open-x3d-pro').version
+          $target = $meta.target_directory
           $setup = @(Get-ChildItem "$target\release\bundle\nsis\*-setup.exe")
           if ($setup.Count -ne 1) { throw "expected one NSIS setup exe in $target\release\bundle\nsis, found $($setup.Count)" }
           New-Item -ItemType Directory artifacts -Force | Out-Null

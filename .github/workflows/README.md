@@ -52,7 +52,7 @@ Artifacts need a signed-in GitHub account.
 
 ## `release.yml` (tag `v*`)
 
-1. `check` (ubuntu-24.04): checks that the tagged commit is on `main` and that the tag version matches `tauri.conf.json`, `app/package.json`, root `Cargo.toml`, the INF `DriverVer` and the `openx3d.rc` `ProductVersion` (`a.b.c.0`).
+1. `check` (ubuntu-24.04): checks that the tagged commit is on `main` and that the tag version matches `app/package.json`, root `Cargo.toml` (which Tauri also uses), the INF `DriverVer` and the `openx3d.rc` `ProductVersion` (`a.b.c.0`).
 2. `build`: `build.yml` with `sign: true` and the two signing secrets.
 3. `publish` (the only job with `contents: write`, in environment `release`): GitHub Release with the artifact's files. `v0.*` tags and tags with a `-suffix` are published as pre-releases.
 

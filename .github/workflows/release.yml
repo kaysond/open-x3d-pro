@@ -34,7 +34,6 @@ jobs:
           $rc = Get-Content driver/openx3d/openx3d.rc -Raw
           # @(file, found, expected); DriverVer is numeric a.b.c.d, so compare a.b.c against the tag without any -suffix.
           $checks = @(
-            @('app/src-tauri/tauri.conf.json version', (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version, $version),
             @('app/package.json version', (Get-Content app/package.json -Raw | ConvertFrom-Json).version, $version),
             @('Cargo.toml [workspace.package] version', $(if ($cargo -match '(?s)\[workspace\.package\](.*?)(?=\n\[|$)' -and $Matches[1] -match '(?m)^version\s*=\s*"([^"]+)"') { $Matches[1] }), $version),
             @('driver/openx3d/openx3d.inf DriverVer', $(if ($inf -match 'DriverVer\s*=\s*[^,]+,\s*([\d.]+)') { $Matches[1].Split('.')[0..2] -join '.' }), ($version -split '-')[0]),
