@@ -144,11 +144,10 @@ export function ProfilesPage() {
             </button>
             <button onClick={() => void activate(draft.id)}>Activate manually</button>
             <button
-              onClick={() =>
-                void guard(async () => {
-                  download(draft.name, await api.exportProfile(draft.id));
-                })
-              }
+              disabled={!saved}
+              onClick={() => {
+                if (saved) download(saved.name, JSON.stringify(saved, null, 2));
+              }}
             >
               Export
             </button>

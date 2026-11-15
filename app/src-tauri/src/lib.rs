@@ -52,11 +52,9 @@ mod app {
                 commands::preview_config,
                 commands::end_preview,
                 commands::list_windows,
-                commands::get_settings,
                 commands::save_settings,
                 commands::start_calibration,
                 commands::finish_calibration,
-                commands::export_profile,
                 commands::import_profile,
             ])
             .on_window_event(|window, event| {

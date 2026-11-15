@@ -208,13 +208,6 @@ impl ProfileStore {
         self.save(p)
     }
 
-    pub fn export(&self, id: &str) -> Result<String, StoreError> {
-        let p = self
-            .get(id)
-            .ok_or_else(|| StoreError::NotFound(id.into()))?;
-        Ok(serde_json::to_string_pretty(p)?)
-    }
-
     fn fix_default(&mut self) -> Result<(), StoreError> {
         let defaults: Vec<usize> = (0..self.profiles.len())
             .filter(|&i| self.profiles[i].is_default)
@@ -407,18 +400,17 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn import_export() {
+    fn import() {
         let dir = temp_dir("store-import");
         let mut s = ProfileStore::load(dir.clone()).unwrap();
         let def_id = s.list()[0].id.clone();
-        let json = s.export(&def_id).unwrap();
+        let json = serde_json::to_string(s.get(&def_id).unwrap()).unwrap();
         let imported = s.import(&json).unwrap();
         assert_ne!(imported.id, def_id);
         assert!(!imported.is_default);
         assert_eq!(imported.config, s.get(&def_id).unwrap().config);
         assert_eq!(s.list().len(), 2);
         assert!(matches!(s.import("{\"name\":1}"), Err(StoreError::Json(_))));
-        assert!(matches!(s.export("nope"), Err(StoreError::NotFound(_))));
         fs::remove_dir_all(dir).unwrap();
     }
 }

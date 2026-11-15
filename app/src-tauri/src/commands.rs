@@ -104,11 +104,6 @@ pub fn list_windows() -> Result<Vec<WindowInfo>, String> {
 }
 
 #[tauri::command]
-pub fn get_settings(shared: State<'_, Shared>) -> Result<Settings, String> {
-    Ok(shared.lock().settings.clone())
-}
-
-#[tauri::command]
 pub fn save_settings(
     app: AppHandle,
     shared: State<'_, Shared>,
@@ -149,11 +144,6 @@ pub fn start_calibration(shared: State<'_, Shared>, axis: AxisId) -> Result<(), 
 #[tauri::command]
 pub fn finish_calibration(shared: State<'_, Shared>, axis: AxisId) -> Result<Calibration, String> {
     shared.lock().calibration.finish(axis).map_err(String::from)
-}
-
-#[tauri::command]
-pub fn export_profile(shared: State<'_, Shared>, id: String) -> Result<String, String> {
-    shared.lock().store.export(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

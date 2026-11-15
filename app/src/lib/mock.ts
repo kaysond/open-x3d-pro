@@ -136,7 +136,6 @@ export function createMockTransport(): Transport {
       },
       { pid: 812, exePath: 'C:\\Windows\\explorer.exe', title: 'File Explorer' },
     ],
-    get_settings: () => settings,
     save_settings: ({ settings: s }) => {
       settings = s;
       emit('state', state());
@@ -154,7 +153,6 @@ export function createMockTransport(): Transport {
       if (c.min >= c.max) throw new Error('the axis did not move; sweep it through its full range');
       return { min: c.min, center: toRaw16(axis, raw[axis]), max: c.max };
     },
-    export_profile: ({ id }) => JSON.stringify(find(id), null, 2),
     import_profile: ({ json }) => {
       const p = JSON.parse(json) as Partial<Profile>;
       if (typeof p.name !== 'string' || typeof p.config !== 'object') throw new Error('Not a profile JSON file');
