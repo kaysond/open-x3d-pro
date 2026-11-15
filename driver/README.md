@@ -31,7 +31,7 @@ READ_REPORT policy: hidclass keeps a few reads pending per device. On every USB 
 | Path | What |
 |---|---|
 | `pipeline/pipeline.{h,c}` | Pure C11 pipeline and blob validation, shared by the driver and the host test |
-| `test/` | Host test: `make` runs `core/testdata/vectors.json` |
+| `test/` | Host test: `make` runs `core/testdata/vectors.txt` |
 | `openx3d/` | UMDF driver: `driver.c` (entry, device add), `device.c` (state, read policy), `usb.c`, `hid.c` (IOCTLs), `registry.c`, `descriptor.h`, `openx3d.inf`, `openx3d.vcxproj`, `openx3d.rc` |
 | `scripts/` | `package.ps1` (stage + Inf2Cat), `sign-catalog.ps1` (on-PC catalog signing, embedded in and run by the app installer) |
 

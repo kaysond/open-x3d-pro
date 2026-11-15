@@ -3,29 +3,10 @@
 use crate::blob::{compile, CompiledConfig};
 use crate::config::{AxisId, Calibration, Curve, DeviceConfig, HatMode};
 use crate::pipeline::{process, RawReport};
-use serde::Serialize;
 use std::error::Error;
 
 /// Path of the committed file, relative to the crate root.
-pub const PATH: &str = "testdata/vectors.json";
-
-#[derive(Serialize)]
-struct Vector {
-    name: &'static str,
-    blob: String,
-    cases: Vec<Case>,
-}
-
-#[derive(Serialize)]
-struct Case {
-    raw: String,
-    x: u16,
-    y: u16,
-    rz: u16,
-    slider: u16,
-    hat: u8,
-    buttons: u32,
-}
+pub const PATH: &str = "testdata/vectors.txt";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -207,35 +188,30 @@ fn scenarios() -> Vec<(&'static str, DeviceConfig)> {
     ]
 }
 
-/// The committed `vectors.json` content.
+/// The committed `vectors.txt` content: per scenario a `V <name> <blob hex>` line, then one
+/// `C <raw hex> <x> <y> <rz> <slider> <hat> <buttons>` line per input frame.
 pub fn generate() -> Result<String, Box<dyn Error>> {
     let raws = raw_cases();
-    let mut out = Vec::new();
+    let mut out = String::new();
     for (name, cfg) in scenarios() {
         cfg.validate().map_err(|e| format!("{name}: {e}"))?;
         let compiled = CompiledConfig::from_config(&cfg);
-        let cases = raws
-            .iter()
-            .map(|raw| {
-                let r = process(&compiled, raw);
-                Case {
-                    raw: hex(raw),
-                    x: r.x,
-                    y: r.y,
-                    rz: r.rz,
-                    slider: r.slider,
-                    hat: r.hat,
-                    buttons: r.buttons,
-                }
-            })
-            .collect();
-        out.push(Vector {
-            name,
-            blob: hex(&compile(&cfg)),
-            cases,
-        });
+        out += &format!("V {name} {}\n", hex(&compile(&cfg)));
+        for raw in &raws {
+            let r = process(&compiled, raw);
+            out += &format!(
+                "C {} {} {} {} {} {} {}\n",
+                hex(raw),
+                r.x,
+                r.y,
+                r.rz,
+                r.slider,
+                r.hat,
+                r.buttons
+            );
+        }
     }
-    Ok(serde_json::to_string_pretty(&out)? + "\n")
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -258,12 +234,14 @@ mod tests {
 
     #[test]
     fn every_scenario_has_cases_and_a_blob() {
-        let v: serde_json::Value = serde_json::from_str(&generate().unwrap()).unwrap();
-        let v = v.as_array().unwrap();
-        assert!(v.len() >= 15);
-        for s in v {
-            assert_eq!(s["blob"].as_str().unwrap().len(), 480);
-            assert!(s["cases"].as_array().unwrap().len() >= 3);
-        }
+        let text = generate().unwrap();
+        let blobs: Vec<&str> = text
+            .lines()
+            .filter_map(|l| l.strip_prefix("V ")?.split(' ').nth(1))
+            .collect();
+        assert!(blobs.len() >= 15);
+        assert!(blobs.iter().all(|b| b.len() == 480));
+        let cases = text.lines().filter(|l| l.starts_with("C ")).count();
+        assert_eq!(cases, blobs.len() * raw_cases().len());
     }
 }

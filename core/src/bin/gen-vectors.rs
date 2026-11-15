@@ -1,4 +1,4 @@
-//! Regenerates `core/testdata/vectors.json`: `cargo run -p x3d-core --bin gen-vectors`.
+//! Regenerates `core/testdata/vectors.txt`: `cargo run -p x3d-core --bin gen-vectors`.
 
 use std::path::Path;
 

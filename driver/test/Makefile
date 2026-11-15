@@ -1,5 +1,5 @@
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror -O2
-VECTORS := ../../core/testdata/vectors.json
+VECTORS := ../../core/testdata/vectors.txt
 
 .PHONY: test clean
 

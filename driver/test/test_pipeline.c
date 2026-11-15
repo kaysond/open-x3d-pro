@@ -1,96 +1,9 @@
-/* Host test for driver/pipeline: runs every case of a vectors.json file
+/* Host test for driver/pipeline: runs every case of a vectors.txt file
  * (CONTRACT 4.3) through pipeline_process. Axes +-1, hat/buttons exact. */
 #include "pipeline.h"
 
-#include <ctype.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-
-/* ---- minimal JSON scanner for the fixed vectors.json shape ---- */
-
-static const char *p;  /* cursor into the file */
-static int parse_ok = 1;
-
-static void ws(void)
-{
-    while (*p && isspace((unsigned char)*p))
-        p++;
-}
-
-static int eat(char c)
-{
-    ws();
-    if (*p == c) {
-        p++;
-        return 1;
-    }
-    return 0;
-}
-
-static void expect(char c)
-{
-    if (!eat(c)) {
-        if (parse_ok)
-            fprintf(stderr, "parse error: expected '%c' near \"%.20s\"\n", c, p);
-        parse_ok = 0;
-    }
-}
-
-/* Reads a string without escapes (none occur in vectors.json) into out. */
-static void str(char *out, size_t cap)
-{
-    size_t n = 0;
-    expect('"');
-    while (parse_ok && *p && *p != '"') {
-        if (*p == '\\' && p[1])
-            p++;
-        if (n + 1 < cap)
-            out[n++] = *p;
-        p++;
-    }
-    out[n] = 0;
-    expect('"');
-}
-
-static unsigned long long num(void)
-{
-    char *end;
-    unsigned long long v;
-    ws();
-    v = strtoull(p, &end, 10);
-    if (end == p) {
-        fprintf(stderr, "parse error: expected number near \"%.20s\"\n", p);
-        parse_ok = 0;
-    }
-    p = end;
-    return v;
-}
-
-static void skip(void)
-{
-    char tmp[2];
-    ws();
-    if (*p == '"') {
-        str(tmp, sizeof(tmp));
-    } else if (*p == '{' || *p == '[') {
-        char close = *p == '{' ? '}' : ']';
-        p++;
-        if (eat(close))
-            return;
-        do {
-            if (close == '}') {
-                str(tmp, sizeof(tmp));
-                expect(':');
-            }
-            skip();
-        } while (parse_ok && eat(','));
-        expect(close);
-    } else {
-        while (*p && !strchr(",]} \t\r\n", *p))
-            p++; /* number, true, false, null */
-    }
-}
 
 static size_t hex(const char *s, uint8_t *out, size_t cap)
 {
@@ -134,117 +47,52 @@ static void run_case(const char *name, int idx, const X3D_CONFIG *cfg, const tes
            c->slider, c->hat, c->buttons);
 }
 
-static void parse_case(test_case *c)
-{
-    char key[16], buf[64];
-    memset(c, 0, sizeof(*c));
-    expect('{');
-    do {
-        str(key, sizeof(key));
-        expect(':');
-        if (!strcmp(key, "raw")) {
-            str(buf, sizeof(buf));
-            if (hex(buf, c->raw, sizeof(c->raw)) != X3D_RAW_SIZE) {
-                fprintf(stderr, "bad raw \"%s\"\n", buf);
-                parse_ok = 0;
-            }
-        } else if (!strcmp(key, "x")) c->x = num();
-        else if (!strcmp(key, "y")) c->y = num();
-        else if (!strcmp(key, "rz")) c->rz = num();
-        else if (!strcmp(key, "slider")) c->slider = num();
-        else if (!strcmp(key, "hat")) c->hat = num();
-        else if (!strcmp(key, "buttons")) c->buttons = num();
-        else skip();
-    } while (parse_ok && eat(','));
-    expect('}');
-}
-
+/* Lines: "V <name> <blob hex>" starts a vector, "C <raw hex> <x> <y> <rz> <slider> <hat> <buttons>"
+ * is one case of the vector above it. */
 static int run_file(const char *path)
 {
-    static char blob_hex[1024];
-    char name[128], key[16];
-    int vectors = 0;
-    FILE *f = fopen(path, "rb");
+    char line[1024], name[128] = "?", hexbuf[512];
+    X3D_CONFIG cfg;
+    int have_cfg = 0, idx = 0, vectors = 0;
+    FILE *f = fopen(path, "r");
     if (!f) {
         perror(path);
         return 1;
     }
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    char *text = malloc((size_t)size + 1);
-    if (!text || fread(text, 1, (size_t)size, f) != (size_t)size) {
-        fprintf(stderr, "cannot read %s\n", path);
-        fclose(f);
-        free(text);
-        return 1;
-    }
-    text[size] = 0;
-    fclose(f);
-    p = text;
-
-    expect('[');
-    while (parse_ok && !eat(']')) {
-        test_case *cases = NULL;
-        size_t ncases = 0;
-        uint8_t blob[256];
-        size_t blob_len = 0;
-        strcpy(name, "?");
-        expect('{');
-        do {
-            str(key, sizeof(key));
-            expect(':');
-            if (!strcmp(key, "name")) {
-                str(name, sizeof(name));
-            } else if (!strcmp(key, "blob")) {
-                str(blob_hex, sizeof(blob_hex));
-                blob_len = hex(blob_hex, blob, sizeof(blob));
-            } else if (!strcmp(key, "cases")) {
-                expect('[');
-                if (!eat(']')) {
-                    do {
-                        test_case *grown = realloc(cases, (ncases + 1) * sizeof(*cases));
-                        if (!grown) {
-                            parse_ok = 0;
-                            break;
-                        }
-                        cases = grown;
-                        parse_case(&cases[ncases++]);
-                    } while (parse_ok && eat(','));
-                    expect(']');
-                }
-            } else {
-                skip();
-            }
-        } while (parse_ok && eat(','));
-        expect('}');
-        eat(',');
-
-        if (parse_ok) {
-            X3D_CONFIG cfg;
+    while (fgets(line, sizeof(line), f)) {
+        test_case c;
+        if (sscanf(line, "V %127s %511s", name, hexbuf) == 2) {
+            uint8_t blob[256];
+            size_t blob_len = hex(hexbuf, blob, sizeof(blob));
             vectors++;
-            if (!pipeline_validate(blob, blob_len)) {
+            idx = 0;
+            have_cfg = pipeline_validate(blob, blob_len);
+            if (!have_cfg) {
                 printf("FAIL %s: blob does not validate (len %zu)\n", name, blob_len);
                 failures++;
-            } else {
-                memcpy(&cfg, blob, sizeof(cfg));
-                if (!strcmp(name, "identity")) {
-                    X3D_CONFIG id;
-                    pipeline_identity(&id);
-                    if (memcmp(&id, &cfg, sizeof(cfg))) {
-                        printf("FAIL identity: blob differs from pipeline_identity()\n");
-                        failures++;
-                    }
-                }
-                for (size_t i = 0; i < ncases; i++)
-                    run_case(name, (int)i, &cfg, &cases[i]);
+                continue;
             }
+            memcpy(&cfg, blob, sizeof(cfg));
+            if (!strcmp(name, "identity")) {
+                X3D_CONFIG id;
+                pipeline_identity(&id);
+                if (memcmp(&id, &cfg, sizeof(cfg))) {
+                    printf("FAIL identity: blob differs from pipeline_identity()\n");
+                    failures++;
+                }
+            }
+        } else if (sscanf(line, "C %14s %llu %llu %llu %llu %llu %llu", hexbuf, &c.x, &c.y, &c.rz, &c.slider, &c.hat,
+                          &c.buttons) == 7 &&
+                   hex(hexbuf, c.raw, sizeof(c.raw)) == X3D_RAW_SIZE) {
+            if (have_cfg)
+                run_case(name, idx++, &cfg, &c);
+        } else if (line[0] != '\n' && line[0] != '\r') {
+            fprintf(stderr, "%s: bad line: %s", path, line);
+            fclose(f);
+            return 1;
         }
-        free(cases);
     }
-    free(text);
-    if (!parse_ok)
-        return 1;
+    fclose(f);
     printf("%s: %d vectors, %d cases, %d failures\n", path, vectors, total, failures);
     return failures != 0 || total == 0;
 }
@@ -299,7 +147,7 @@ static int self_checks(void)
 int main(int argc, char **argv)
 {
     if (argc != 2) {
-        fprintf(stderr, "usage: %s vectors.json\n", argv[0]);
+        fprintf(stderr, "usage: %s vectors.txt\n", argv[0]);
         return 2;
     }
     if (self_checks())
