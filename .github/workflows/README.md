@@ -76,7 +76,7 @@ openssl x509 -in cert.pem -noout -fingerprint -sha256 | cut -d= -f2 | tr -d :
 shred -u key.pem signing.pfx
 ```
 
-Put the fingerprint in the README before tagging. To replace the certificate, repeat this and update the README in the same commit; older releases then no longer match the README.
+Put the fingerprint in the README and commit `cert.pem` as `release-signing-cert.pem` before tagging. To replace the certificate, repeat this and update both in the same commit; older releases then no longer match the README.
 
 ## Cutting a release
 
