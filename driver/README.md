@@ -73,7 +73,7 @@ To try a local build by hand, from an elevated PowerShell:
 pnputil /add-driver ..\out\openx3d.inf /install
 ```
 
-`pnputil /delete-driver` only accepts the published `oemNN.inf` name, never `openx3d.inf`. The app installer records it in `driver-packages.txt` in the install folder at install time; its uninstaller deletes those packages (after checking `%WINDIR%\INF\oemNN.inf` is still openx3d's, since numbers are reused) and falls back to `Get-WindowsDriver` if the file is missing or a deletion fails.
+`pnputil /delete-driver` only accepts the published `oemNN.inf` name, never `openx3d.inf`. The app's uninstaller looks the published names up with `Get-WindowsDriver` (original name `openx3d.inf`, provider `Open X3D Pro project`) and deletes each package.
 
 Rollback means uninstalling the app (or `pnputil /delete-driver oemNN.inf /uninstall`, then `sign-catalog.ps1 -Remove`). Once the driver package is gone, PnP rebinds the stick to inbox `hidusb`/`input.inf` with no reboot. If the device is stuck, unplug and replug it, or run `pnputil /scan-devices`. Device Manager also works: Roll Back Driver, or Uninstall device with "Attempt to remove the driver" ticked.
 

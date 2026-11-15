@@ -11,8 +11,6 @@
 !define X3D_DRIVER_SRC "${__FILEDIR__}\..\resources\driver"
 !define X3D_SIGN_SRC "${__FILEDIR__}\..\..\..\driver\scripts\sign-catalog.ps1"
 !define X3D_DRIVER_DIR "$PLUGINSDIR\driver"
-; Published oemN.inf names of the installed packages, one per line.
-!define X3D_PUBLISHED "$INSTDIR\driver-packages.txt"
 ; HKLM value set while the user's consent stands. Read before Tauri's reinstall page runs the old
 ; uninstaller (which clears it), so upgrades keep the driver without asking again.
 !define X3D_REG_KEY "Software\OpenX3DPro"
@@ -152,23 +150,6 @@ FunctionEnd
         MessageBox MB_ICONEXCLAMATION|MB_OK "The Open X3D Pro driver could not be installed (pnputil exit code $0).$\r$\nThe app still works with the stock Windows driver, without curves or remapping in games." /SD IDOK
       ${Else}
         WriteRegStr HKLM "${X3D_REG_KEY}" "${X3D_REG_CONSENT}" "1"
-        ; pnputil /delete-driver only takes published oemN.inf names. Record them now so uninstall
-        ; skips the slow lookup. All openx3d packages, since in-place upgrades leave older ones staged.
-        ; Get-WindowsDriver is exact and locale-independent, unlike pnputil /enum-drivers text.
-        !insertmacro X3D_SYSTOOL $1 "WindowsPowerShell\v1.0\powershell.exe"
-        nsExec::ExecToStack `"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-WindowsDriver -Online | Where-Object { $$_.OriginalFileName -like '*\openx3d.inf' -and $$_.ProviderName -eq '${X3D_PROVIDER}' } | ForEach-Object Driver"`
-        Pop $0
-        Pop $1
-        DetailPrint "Get-WindowsDriver openx3d.inf: exit code $0"
-        ${If} $0 == 0
-        ${AndIf} $1 != ""
-          ClearErrors
-          FileOpen $0 "${X3D_PUBLISHED}" w
-          ${IfNot} ${Errors}
-            FileWrite $0 $1
-            FileClose $0
-          ${EndIf}
-        ${EndIf}
       ${EndIf}
     ${EndIf}
   ${EndIf}
@@ -179,83 +160,24 @@ FunctionEnd
 !macro NSIS_HOOK_PREUNINSTALL
   Push $0
   Push $1
-  Push $2
-  Push $3
-  Push $4
-  Push $5
-  Push $6
-  !insertmacro X3D_SYSTOOL $1 "pnputil.exe"
   DetailPrint "Removing the Open X3D Pro driver"
-  ; $3: "" = nothing removed, "ok" = all removed, "fail" = fall back to Get-WindowsDriver.
-  StrCpy $3 ""
-  ClearErrors
-  FileOpen $4 "${X3D_PUBLISHED}" r
-  ${IfNot} ${Errors}
-    ${Do}
-      ClearErrors
-      FileRead $4 $2
-      ${IfThen} ${Errors} ${|} ${ExitDo} ${|}
-      StrCpy $5 $2 1 -1
-      ${IfThen} $5 == "$\n" ${|} StrCpy $2 $2 -1 ${|}
-      StrCpy $5 $2 1 -1
-      ${IfThen} $5 == "$\r" ${|} StrCpy $2 $2 -1 ${|}
-      ${IfThen} $2 == "" ${|} ${Continue} ${|}
-      ; oemN numbers are reused, so delete only if the INF copy behind the name is still ours.
-      StrCpy $5 ""
-      ClearErrors
-      FileOpen $6 "$WINDIR\INF\$2" r
-      ${IfNot} ${Errors}
-        FileRead $6 $5
-        FileClose $6
-      ${EndIf}
-      StrCpy $5 $5 13
-      ${If} $5 == "; openx3d.inf"
-        nsExec::ExecToLog '"$1" /delete-driver "$2" /uninstall'
-        Pop $0
-        DetailPrint "pnputil /delete-driver $2: exit code $0"
-      ${Else}
-        StrCpy $0 "not an openx3d package"
-        DetailPrint "Skipping $2: $0"
-      ${EndIf}
-      ${If} $0 == 0
-      ${OrIf} $0 == 3010
-        ${IfThen} $3 == "" ${|} StrCpy $3 "ok" ${|}
-      ${Else}
-        StrCpy $3 "fail"
-      ${EndIf}
-    ${Loop}
-    FileClose $4
-  ${EndIf}
-  Delete "${X3D_PUBLISHED}"
   DeleteRegKey HKLM "${X3D_REG_KEY}"
-
+  ; Written by installers up to 0.1.0.
+  Delete "$INSTDIR\driver-packages.txt"
+  ; pnputil /delete-driver only takes published oemN.inf names. Get-WindowsDriver maps the original
+  ; name to them, exactly and without parsing pnputil's localized text.
   !insertmacro X3D_SYSTOOL $1 "WindowsPowerShell\v1.0\powershell.exe"
-  ${If} $3 != "ok"
-    ; No recorded names, or a recorded name that failed: Get-WindowsDriver maps original
-    ; to published names without parsing pnputil's localized text.
-    nsExec::ExecToLog `"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-WindowsDriver -Online | Where-Object { $$_.OriginalFileName -like '*\openx3d.inf' -and $$_.ProviderName -eq '${X3D_PROVIDER}' } | ForEach-Object { pnputil /delete-driver $$_.Driver /uninstall; 'pnputil /delete-driver ' + $$_.Driver + ': exit code ' + $$LASTEXITCODE }"`
-    Pop $0
-    DetailPrint "driver removal via Get-WindowsDriver: exit code $0"
-  ${EndIf}
+  nsExec::ExecToLog `"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-WindowsDriver -Online | Where-Object { $$_.OriginalFileName -like '*\openx3d.inf' -and $$_.ProviderName -eq '${X3D_PROVIDER}' } | ForEach-Object { pnputil /delete-driver $$_.Driver /uninstall; 'pnputil /delete-driver ' + $$_.Driver + ': exit code ' + $$LASTEXITCODE }"`
+  Pop $0
+  DetailPrint "driver removal via Get-WindowsDriver: exit code $0"
 
   DetailPrint "Removing the driver certificate"
   !insertmacro X3D_EXTRACT 0
   nsExec::ExecToLog '"$1" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${X3D_DRIVER_DIR}\sign-catalog.ps1" -Remove'
   Pop $0
   DetailPrint "sign-catalog.ps1 -Remove: exit code $0"
-  Pop $6
-  Pop $5
-  Pop $4
-  Pop $3
-  Pop $2
   Pop $1
   Pop $0
-!macroend
-
-!else
-
-!macro NSIS_HOOK_POSTINSTALL
-  DetailPrint "No driver bundled; skipping driver install"
 !macroend
 
 !endif
