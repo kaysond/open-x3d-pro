@@ -60,7 +60,7 @@ cd driver/test && make                 # host build + run of the C pipeline agai
 
 Windows installs a driver package only if its catalog (`openx3d.cat`, the list of hashes of the driver's files) is signed by a certificate the PC trusts. The driver runs in user mode (UMDF 2), so it does not need the Microsoft (WHQL or attestation) signature that kernel drivers require; any trusted code-signing certificate works.
 
-Open X3D Pro does what [libwdi/Zadig](https://github.com/pbatard/libwdi/wiki/Certification-Practice-Statement) does: the catalog ships **unsigned** and is signed on your PC, by a certificate made on your PC, whose private key is then destroyed. The installer's first page has a checkbox, unticked by default. When it is ticked, [`sign-catalog.ps1`](driver/scripts/sign-catalog.ps1) runs elevated and:
+Open X3D Pro does what [libwdi/Zadig](https://github.com/pbatard/libwdi/wiki/Certification-Practice-Statement) does: the catalog ships **unsigned** and is signed on your PC, by a certificate made on your PC, whose private key is then destroyed. The installer's first page has a checkbox, ticked by default. While it is ticked, [`sign-catalog.ps1`](driver/scripts/sign-catalog.ps1) runs elevated and:
 
 1. Removes any certificate from an earlier Open X3D Pro install.
 2. Creates a new self-signed code-signing certificate, `CN=Open X3D Pro local driver signing (key destroyed)`, with a non-exportable private key in the machine store (usable by administrators only).
@@ -72,7 +72,7 @@ Then the driver is installed. Other cases:
 
 - **Unticked:** only the app is installed and the stick keeps the stock Windows driver, so there are no curves or remapping in games. Run the installer again to change your mind.
 - **Uninstall** removes the certificate from both stores.
-- **Upgrades** remember the choice: the box starts ticked if the driver was installed before, and passive (`/P`) upgrades and silent `/UPDATE` installs keep the driver.
+- **Upgrades:** passive (`/P`) upgrades and silent `/UPDATE` installs keep the driver if it was installed before.
 - **Other silent (`/S`) and passive (`/P`) installs** do this only when given `/TRUSTCERT`.
 
 ### What the certificate can and cannot do

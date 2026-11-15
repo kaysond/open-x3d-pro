@@ -1,7 +1,7 @@
 ; Open X3D Pro installer hooks, included by Tauri's installer.nsi (which already includes
 ; LogicLib, x64.nsh, FileFunc.nsh and MUI2/nsDialogs). The installer runs elevated (installMode perMachine).
 ; The NSIS stub is 32-bit: 64-bit-only tools such as pnputil.exe are reached via Sysnative.
-; The driver catalog ships unsigned. Only if the user ticks the box on the certificate page (or passes
+; The driver catalog ships unsigned. Only if the box on the certificate page stays ticked (or the user passes
 ; /TRUSTCERT to a silent/passive install), sign-catalog.ps1 signs it with a certificate made on this PC,
 ; deletes its private key and trusts that certificate (the libwdi/Zadig approach); otherwise the driver
 ; is not installed.
@@ -82,11 +82,12 @@ Function X3DCertPage
 
   ${NSD_CreateCheckbox} 0 62u 100% 12u "&Create and trust a driver certificate for this PC, and install the driver"
   Pop $X3DCertCheckbox
-  ${If} $X3DTrustCert == "1"
+  ; Ticked by default; "0" only when the user unticked it and came back to this page.
+  ${If} $X3DTrustCert != "0"
     ${NSD_Check} $X3DCertCheckbox
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 80u 100% 24u "If you leave this unticked, only the app is installed and the joystick keeps the stock Windows driver: no curves or remapping in games. You can run this installer again later."
+  ${NSD_CreateLabel} 0 80u 100% 24u "If you untick this, only the app is installed and the joystick keeps the stock Windows driver: no curves or remapping in games. You can run this installer again later."
   Pop $0
 
   ${NSD_CreateLink} 0 110u 100% 12u "Why is this needed, and how can I check the certificate?"
