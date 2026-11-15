@@ -44,9 +44,10 @@ Suggested reading order: core → driver → backend → frontend → installer 
 - [rust-toolchain.toml](rust-toolchain.toml): pins Rust 1.98.1 with rustfmt and clippy; CI
   runs `rustup toolchain install` to honour it.
 - [rustfmt.toml](rustfmt.toml): formatter settings for `cargo fmt`.
-- [README.md](README.md): user-facing overview, architecture, build steps, and the long
-  "Driver signing" and "Verifying a download" sections that the installer and release
-  notes link to. The release certificate fingerprint listed here is checked by CI.
+- [README.md](README.md): user-facing overview, installation, and the long "Driver signing"
+  and "Verifying a download" sections that the installer and release notes link to. The
+  release certificate fingerprint listed here is checked by CI.
+- [CONTRIBUTING.md](CONTRIBUTING.md): architecture, repository layout and build steps.
 - [release-signing-cert.pem](release-signing-cert.pem): public half of the self-signed
   certificate that signs release installers, so users can verify a download.
 - [LICENSE](LICENSE): MIT.
