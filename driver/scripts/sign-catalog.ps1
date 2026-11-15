@@ -17,7 +17,8 @@ $ErrorActionPreference = 'Stop'
 # Uninstall and upgrades find earlier certificates by this subject; keep it stable.
 $subject = 'CN=Open X3D Pro local driver signing (key destroyed)'
 
-Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -eq $subject | Remove-Item -DeleteKey
+# -DeleteKey is a Cert: provider parameter, so it only binds when the path is given as an argument, not piped.
+Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -eq $subject | ForEach-Object { Remove-Item $_.PSPath -DeleteKey }
 Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher |
     Where-Object Subject -eq $subject | Remove-Item
 if ($Remove) { return }
