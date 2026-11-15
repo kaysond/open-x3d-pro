@@ -128,7 +128,7 @@ Nightlies and releases are built only by GitHub Actions from this repository: [`
 The setup exe of every release is signed by the release workflow with the project's self-signed certificate. Like the driver certificate it is limited to code signing (critical `CA:FALSE`, Extended Key Usage Code Signing only). Its private key is a GitHub Actions secret that only the release workflow receives. Its SHA-256 fingerprint is:
 
 ```
-(not created yet)
+8DC5DB41F8E0B876A86188DC8DF5ADDD7E95AA33C8EF719836EA86CABA19DE73
 ```
 
 ```powershell
