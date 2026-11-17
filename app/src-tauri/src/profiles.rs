@@ -221,6 +221,7 @@ impl ProfileStore {
                 id: new_id(),
                 name: "Default".into(),
                 exe_paths: Vec::new(),
+                auto_activate: true,
                 is_default: true,
                 config: DeviceConfig::default(),
             };
@@ -285,6 +286,7 @@ pub(crate) mod tests {
             id: String::new(),
             name: name.into(),
             exe_paths: vec![" game.exe ".into(), "".into()],
+            auto_activate: true,
             is_default: false,
             config: DeviceConfig::default(),
         }

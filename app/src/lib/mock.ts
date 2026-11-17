@@ -23,8 +23,8 @@ function dcsConfig(): DeviceConfig {
 
 export function createMockTransport(): Transport {
   let profiles: Profile[] = [
-    { id: uuid(), name: 'Default', exePaths: [], isDefault: true, config: defaultDeviceConfig() },
-    { id: uuid(), name: 'DCS World', exePaths: [DCS_EXE], isDefault: false, config: dcsConfig() },
+    { id: uuid(), name: 'Default', exePaths: [], autoActivate: true, isDefault: true, config: defaultDeviceConfig() },
+    { id: uuid(), name: 'DCS World', exePaths: [DCS_EXE], autoActivate: true, isDefault: false, config: dcsConfig() },
   ];
   let settings: Settings = { autostart: true, switchingPaused: false, matchMode: 'foreground' };
   let manual: string | null = null;
@@ -162,7 +162,7 @@ export function createMockTransport(): Transport {
     import_profile: ({ json }) => {
       const p = JSON.parse(json) as Partial<Profile>;
       if (typeof p.name !== 'string' || typeof p.config !== 'object') throw new Error('Not a profile JSON file');
-      const created: Profile = { exePaths: [], ...p, name: p.name, config: p.config, id: uuid(), isDefault: false };
+      const created: Profile = { exePaths: [], autoActivate: true, ...p, name: p.name, config: p.config, id: uuid(), isDefault: false };
       profiles = [...profiles, created];
       return created;
     },

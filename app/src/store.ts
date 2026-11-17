@@ -20,7 +20,7 @@ interface Store {
   init: () => Promise<() => void>;
   select: (id: string) => void;
   editConfig: (mutate: (config: DeviceConfig) => void) => void;
-  editProfile: (patch: Partial<Pick<Profile, 'name' | 'exePaths'>>) => void;
+  editProfile: (patch: Partial<Pick<Profile, 'name' | 'exePaths' | 'autoActivate'>>) => void;
   save: () => Promise<void>;
   discard: () => void;
   createProfile: (from?: Profile) => Promise<void>;
@@ -168,7 +168,7 @@ export const useStore = create<Store>()((set, get) => ({
       const profile: Profile = from
         ? // Exe paths are not copied: two profiles matching one exe would be ambiguous.
           { ...structuredClone(from), id: uuid(), name: `${from.name} (copy)`, exePaths: [], isDefault: false }
-        : { id: uuid(), name: 'New profile', exePaths: [], isDefault: false, config: defaultDeviceConfig() };
+        : { id: uuid(), name: 'New profile', exePaths: [], autoActivate: true, isDefault: false, config: defaultDeviceConfig() };
       const saved = await api.saveProfile(profile);
       set((s) => ({ profiles: [...s.profiles, saved] }));
       get().select(saved.id);

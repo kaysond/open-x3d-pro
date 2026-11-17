@@ -57,6 +57,7 @@ export interface Profile {
   id: string;
   name: string;
   exePaths: string[];
+  autoActivate: boolean;
   isDefault: boolean;
   config: DeviceConfig;
 }

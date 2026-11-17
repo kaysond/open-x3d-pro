@@ -226,10 +226,11 @@ Linux; Tauri, HID and Win32 code is behind `cfg(windows)`.
 - [app/src-tauri/src/settings.rs](app/src-tauri/src/settings.rs): `load` (also reports
   first run) and `save` for `settings.json`.
 - [app/src-tauri/src/switcher.rs](app/src-tauri/src/switcher.rs): `Switcher` decides the
-  active profile: manual override > held (paused or previewing) > foreground/running match
-  > default. `evaluate()` returns a `ProfileSwitched` when it changes and recompiles the
-  blob; `take_push()` hands the device thread a blob only when its CRC differs from what
-  the driver has. `match_profile` does full-path-then-basename matching.
+  active profile: manual override (until the automatic match changes) > held (paused or
+  previewing) > foreground/running match > default. `evaluate()` returns a
+  `ProfileSwitched` when it changes and recompiles the blob; `take_push()` hands the device
+  thread a blob only when its CRC differs from what the driver has. `match_profile` does
+  full-path-then-basename matching, skipping profiles with automatic activation off.
 - [app/src-tauri/src/device.rs](app/src-tauri/src/device.rs): the device thread. `open`
   finds the driver's vendor collection or falls back to the stock joystick; `session` loops:
   push config if due, read a report, update calibration and key chords, compute or read the

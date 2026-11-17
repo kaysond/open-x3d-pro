@@ -115,11 +115,6 @@ export function ProfilesPage() {
             />
           </label>
         </div>
-        <div className={styles.wrap}>
-          <button onClick={() => void activate(null)}>
-            Back to automatic
-          </button>
-        </div>
       </section>
 
       {draft && (
@@ -138,7 +133,7 @@ export function ProfilesPage() {
             <button disabled={draft.isDefault} onClick={() => void setDefault(draft.id)}>
               Set default
             </button>
-            <button onClick={() => void activate(draft.id)}>Activate manually</button>
+            <button onClick={() => void activate(draft.id)}>Activate</button>
             <button
               disabled={!saved}
               onClick={() => {
@@ -157,48 +152,62 @@ export function ProfilesPage() {
             </button>
           </div>
 
-          <h3>Executables</h3>
-          {draft.isDefault && <p className={styles.muted}>The default profile applies when no executable matches.</p>}
-          <ul className={styles.list}>
-            {draft.exePaths.map((path) => (
-              <li key={path} className={styles.row}>
-                <span className={cx(styles.mono, styles.grow)}>{path}</span>
-                <button
-                  onClick={() => {
-                    editProfile({ exePaths: draft.exePaths.filter((x) => x !== path) });
-                  }}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-          <form
-            className={styles.row}
-            onSubmit={(e) => {
-              e.preventDefault();
-              addPath(newPath);
-              setNewPath('');
-            }}
-          >
+          <div className={styles.cardHeader}>
+            <h3>Automatic Activation</h3>
             <input
-              className={styles.grow}
-              placeholder="C:\Games\game.exe or game.exe"
-              value={newPath}
+              type="checkbox"
+              role="switch"
+              className={styles.switch}
+              aria-label="Automatic activation"
+              checked={draft.autoActivate}
               onChange={(e) => {
-                setNewPath(e.target.value);
+                editProfile({ autoActivate: e.target.checked });
               }}
             />
-            <button type="submit">Add path</button>
-            <button
-              type="button"
-              onClick={() => {
-                setPicking(true);
+          </div>
+          {draft.isDefault && <p className={styles.muted}>The default profile applies when no executable matches.</p>}
+          <fieldset className={styles.cardBody} disabled={!draft.autoActivate}>
+            <ul className={styles.list}>
+              {draft.exePaths.map((path) => (
+                <li key={path} className={styles.row}>
+                  <span className={cx(styles.mono, styles.grow)}>{path}</span>
+                  <button
+                    onClick={() => {
+                      editProfile({ exePaths: draft.exePaths.filter((x) => x !== path) });
+                    }}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <form
+              className={styles.row}
+              onSubmit={(e) => {
+                e.preventDefault();
+                addPath(newPath);
+                setNewPath('');
               }}
             >
-              Add running app…
-            </button>
-          </form>
+              <input
+                className={styles.grow}
+                placeholder="C:\Games\game.exe or game.exe"
+                value={newPath}
+                onChange={(e) => {
+                  setNewPath(e.target.value);
+                }}
+              />
+              <button type="submit">Add path</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPicking(true);
+                }}
+              >
+                Add running app…
+              </button>
+            </form>
+          </fieldset>
         </section>
       )}
 

@@ -287,8 +287,15 @@ pub struct Profile {
     pub id: String,
     pub name: String,
     pub exe_paths: Vec<String>,
+    /// Profiles saved before this field existed matched automatically.
+    #[serde(default = "enabled")]
+    pub auto_activate: bool,
     pub is_default: bool,
     pub config: DeviceConfig,
+}
+
+fn enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

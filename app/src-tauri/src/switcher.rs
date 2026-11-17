@@ -25,6 +25,8 @@ pub struct ProfileSwitched {
 
 pub struct Switcher {
     manual: Option<String>,
+    /// What automatic matching alone last picked.
+    auto: Option<String>,
     preview: Option<DeviceConfig>,
     foreground: Option<String>,
     running: Vec<String>,
@@ -41,6 +43,7 @@ impl Default for Switcher {
         let compiled = CompiledConfig::from_config(&config);
         Switcher {
             manual: None,
+            auto: None,
             preview: None,
             foreground: None,
             running: Vec::new(),
@@ -67,7 +70,7 @@ impl Switcher {
         &self.config.key_bindings
     }
 
-    /// Manual override (`None` = automatic); ends any preview.
+    /// Manual override (`None` = automatic), kept until the automatic match changes; ends any preview.
     pub fn set_manual(&mut self, id: Option<String>) {
         self.manual = id;
         self.preview = None;
@@ -100,6 +103,21 @@ impl Switcher {
         // A deleted profile's override must not come back if a profile with its id reappears.
         if self.manual.as_deref().is_some_and(|id| find(id).is_none()) {
             self.manual = None;
+        }
+        // Switching to (or away from) a matched app hands control back to automatic matching.
+        // Not `auto_match`: its running-mode stickiness depends on the active profile, which a
+        // manual pick changes, so the comparison would end the override straight away.
+        let candidates = match settings.match_mode {
+            MatchMode::Foreground => self.foreground.as_slice(),
+            MatchMode::Running => self.running.as_slice(),
+        };
+        let auto = candidates
+            .iter()
+            .find_map(|exe| match_profile(profiles, exe))
+            .map(|p| p.id.clone());
+        if auto != self.auto {
+            self.manual = None;
+            self.auto = auto;
         }
         let hold = settings.switching_paused || self.preview.is_some();
         let kept = self
@@ -205,6 +223,7 @@ pub fn match_profile<'a>(profiles: &'a [Profile], exe: &str) -> Option<&'a Profi
     let any = |f: &dyn Fn(&str) -> bool| {
         profiles
             .iter()
+            .filter(|p| p.auto_activate)
             .find(|p| p.exe_paths.iter().any(|e| f(&normalize(e))))
     };
     any(&|e| e == exe).or_else(|| any(&|e| basename(e) == base))
@@ -222,6 +241,7 @@ mod tests {
             id: id.into(),
             name: id.into(),
             exe_paths: exes.iter().map(|s| s.to_string()).collect(),
+            auto_activate: true,
             is_default,
             config,
         }
@@ -275,11 +295,22 @@ mod tests {
         let ps = profiles();
         let mut settings = Settings::default();
         let mut s = Switcher::default();
-        s.set_manual(Some("bare".into()));
         s.set_foreground(Some("C:\\Sims\\dcs.exe".into()));
+        s.evaluate(&ps, &settings);
+        s.set_manual(Some("bare".into()));
         assert_eq!(s.evaluate(&ps, &settings).unwrap().reason, Reason::Manual);
-        s.set_manual(None);
+        assert_eq!(s.evaluate(&ps, &settings), None);
+        // A new automatic match ends the override.
+        s.set_foreground(Some("C:\\Windows\\explorer.exe".into()));
+        assert_eq!(s.evaluate(&ps, &settings).unwrap().reason, Reason::Default);
+        s.set_foreground(Some("C:\\Sims\\dcs.exe".into()));
         assert_eq!(s.evaluate(&ps, &settings).unwrap().profile_id, "sim");
+
+        // A profile with automatic activation off is never matched.
+        let mut off = ps.clone();
+        off.iter_mut().for_each(|p| p.auto_activate = false);
+        assert_eq!(s.evaluate(&off, &settings).unwrap().reason, Reason::Default);
+        s.evaluate(&ps, &settings);
 
         settings.switching_paused = true;
         s.set_foreground(None);
@@ -324,6 +355,15 @@ mod tests {
         assert_eq!(s.evaluate(&ps, &settings).unwrap().profile_id, "bare");
         s.set_running(vec![]);
         assert_eq!(s.evaluate(&ps, &settings).unwrap().reason, Reason::Default);
+
+        // A manual pick holds while two matched apps keep running, the sticky one listed second.
+        s.set_running(vec!["C:\\Sims\\dcs.exe".into()]);
+        s.evaluate(&ps, &settings);
+        s.set_running(vec!["C:\\a\\game.exe".into(), "C:\\Sims\\dcs.exe".into()]);
+        s.evaluate(&ps, &settings);
+        s.set_manual(Some("full".into()));
+        assert_eq!(s.evaluate(&ps, &settings).unwrap().reason, Reason::Manual);
+        assert_eq!(s.evaluate(&ps, &settings), None);
     }
 
     #[test]
