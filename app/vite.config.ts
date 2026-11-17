@@ -9,6 +9,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     watch: { ignored: ['**/src-tauri/**'] },
+    // The logo lives at the repo root.
+    fs: { allow: ['..'] },
   },
   build: {
     target: 'chrome105',
