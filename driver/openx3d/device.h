@@ -1,7 +1,7 @@
 /* Per-device state. Included via driver.h. */
 #pragma once
 
-#define X3D_DRIVER_VERSION_BCD 0x0010 /* 0.1.0 */
+#define X3D_DRIVER_VERSION_BCD 0x0020 /* 0.2.0 */
 #define X3D_FLAG_FROM_REGISTRY 0x01   /* active config is the one stored in the registry */
 #define X3D_FLAG_IDENTITY      0x02   /* active config == pipeline_identity() */
 
