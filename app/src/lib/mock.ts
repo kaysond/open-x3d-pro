@@ -3,6 +3,7 @@ import type { AppState, AxisId, DeviceConfig, InputFrame, Profile, Settings } fr
 import { AXES, defaultDeviceConfig } from '../types';
 import type { Commands, Events, Transport } from './ipc';
 import { processAxis, toRaw16 } from './pipeline';
+import { uuid } from './uuid';
 
 const DCS_EXE = 'C:\\Program Files\\Eagle Dynamics\\DCS World\\bin\\DCS.exe';
 
@@ -22,8 +23,8 @@ function dcsConfig(): DeviceConfig {
 
 export function createMockTransport(): Transport {
   let profiles: Profile[] = [
-    { id: crypto.randomUUID(), name: 'Default', exePaths: [], isDefault: true, config: defaultDeviceConfig() },
-    { id: crypto.randomUUID(), name: 'DCS World', exePaths: [DCS_EXE], isDefault: false, config: dcsConfig() },
+    { id: uuid(), name: 'Default', exePaths: [], isDefault: true, config: defaultDeviceConfig() },
+    { id: uuid(), name: 'DCS World', exePaths: [DCS_EXE], isDefault: false, config: dcsConfig() },
   ];
   let settings: Settings = { autostart: true, switchingPaused: false, matchMode: 'foreground' };
   let manual: string | null = null;
@@ -159,7 +160,7 @@ export function createMockTransport(): Transport {
     import_profile: ({ json }) => {
       const p = JSON.parse(json) as Partial<Profile>;
       if (typeof p.name !== 'string' || typeof p.config !== 'object') throw new Error('Not a profile JSON file');
-      const created: Profile = { exePaths: [], ...p, name: p.name, config: p.config, id: crypto.randomUUID(), isDefault: false };
+      const created: Profile = { exePaths: [], ...p, name: p.name, config: p.config, id: uuid(), isDefault: false };
       profiles = [...profiles, created];
       return created;
     },

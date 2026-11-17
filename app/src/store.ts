@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api, errorMessage } from './lib/ipc';
 import type { AppState, DeviceConfig, InputFrame, Profile, ProfileSwitched, Settings } from './types';
 import { defaultDeviceConfig } from './types';
+import { uuid } from './lib/uuid';
 
 interface Store {
   appState: AppState | null;
@@ -166,8 +167,8 @@ export const useStore = create<Store>()((set, get) => ({
     await guard(async () => {
       const profile: Profile = from
         ? // Exe paths are not copied: two profiles matching one exe would be ambiguous.
-          { ...structuredClone(from), id: crypto.randomUUID(), name: `${from.name} (copy)`, exePaths: [], isDefault: false }
-        : { id: crypto.randomUUID(), name: 'New profile', exePaths: [], isDefault: false, config: defaultDeviceConfig() };
+          { ...structuredClone(from), id: uuid(), name: `${from.name} (copy)`, exePaths: [], isDefault: false }
+        : { id: uuid(), name: 'New profile', exePaths: [], isDefault: false, config: defaultDeviceConfig() };
       const saved = await api.saveProfile(profile);
       set((s) => ({ profiles: [...s.profiles, saved] }));
       get().select(saved.id);
