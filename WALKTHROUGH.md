@@ -320,10 +320,10 @@ and events; in a plain browser it runs against an in-memory mock.
   deadzones, sensitivity, and the custom-curve switch with the `CurveEditor`.
 - [app/src/pages/ButtonsPage.tsx](app/src/pages/ButtonsPage.tsx): button map with shift
   layer, hat mode, and key bindings with live chord capture (Esc cancels).
-- [app/src/pages/ProfilesPage.tsx](app/src/pages/ProfilesPage.tsx): profile list,
-  new/duplicate/import/export/delete, default and manual activation, and executable paths
-  including the "Add running app" picker (`RunningAppsModal`, a native `<dialog>`). Export
-  serializes the saved profile in the browser; import goes through the backend.
+- [app/src/pages/ProfilesPage.tsx](app/src/pages/ProfilesPage.tsx): profile list with
+  new/set default/activate/delete, and automatic activation: an on/off switch and
+  executable paths, added by typing, from the file picker, or from the
+  "Add running app" picker (`RunningAppsModal`, a native `<dialog>`).
 - [app/src/pages/SettingsPage.tsx](app/src/pages/SettingsPage.tsx): autostart, pause
   switching, match mode, plus driver/joystick status and the code-signing note.
 

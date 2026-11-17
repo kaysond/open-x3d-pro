@@ -5,17 +5,6 @@ import { guard, useStore } from '../store';
 import styles from '../styles/ui.module.css';
 import type { WindowInfo } from '../types';
 
-function download(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${name.replace(/[\\/:*?"<>|]/g, '_')}.json`;
-  a.click();
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 1000);
-}
-
 function RunningAppsModal({ onPick, onClose }: { onPick: (exePath: string) => void; onClose: () => void }) {
   const [windows, setWindows] = useState<WindowInfo[] | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -55,7 +44,7 @@ export function ProfilesPage() {
   const profiles = useStore((s) => s.profiles);
   const draft = useStore((s) => s.draft);
   const activeId = useStore((s) => s.appState?.activeProfileId ?? null);
-  const { select, editProfile, createProfile, deleteProfile, setDefault, activate, importProfile } = useStore.getState();
+  const { select, editProfile, createProfile, deleteProfile, setDefault, activate } = useStore.getState();
   const [newPath, setNewPath] = useState('');
   const [picking, setPicking] = useState(false);
 
@@ -64,7 +53,6 @@ export function ProfilesPage() {
     if (!draft || !p) return;
     if (!draft.exePaths.some((x) => x.toLowerCase() === p.toLowerCase())) editProfile({ exePaths: [...draft.exePaths, p] });
   };
-  const saved = profiles.find((p) => p.id === draft?.id);
 
   return (
     <div className={styles.row}>
@@ -93,27 +81,20 @@ export function ProfilesPage() {
         </ul>
         <div className={styles.wrap}>
           <button onClick={() => void createProfile()}>New</button>
-          <button disabled={!saved} onClick={() => void (saved && createProfile(saved))}>
-            Duplicate
+          <button disabled={!draft || draft.isDefault} onClick={() => void (draft && setDefault(draft.id))}>
+            Set Default
           </button>
-          <label className={styles.button}>
-            Import…
-            <input
-              type="file"
-              accept=".json,application/json"
-              hidden
-              onChange={(e) => {
-                const input = e.currentTarget;
-                const file = input.files?.[0];
-                if (!file) return;
-                void guard(async () => {
-                  await importProfile(await file.text());
-                }).finally(() => {
-                  input.value = '';
-                });
-              }}
-            />
-          </label>
+          <button disabled={!draft} onClick={() => void (draft && activate(draft.id))}>
+            Activate
+          </button>
+          <button
+            disabled={!draft || draft.isDefault}
+            onClick={() => {
+              if (draft && window.confirm(`Delete profile "${draft.name}"?`)) void deleteProfile(draft.id);
+            }}
+          >
+            Delete
+          </button>
         </div>
       </section>
 
@@ -129,28 +110,6 @@ export function ProfilesPage() {
               }}
             />
           </label>
-          <div className={styles.wrap}>
-            <button disabled={draft.isDefault} onClick={() => void setDefault(draft.id)}>
-              Set default
-            </button>
-            <button onClick={() => void activate(draft.id)}>Activate</button>
-            <button
-              disabled={!saved}
-              onClick={() => {
-                if (saved) download(saved.name, JSON.stringify(saved, null, 2));
-              }}
-            >
-              Export
-            </button>
-            <button
-              disabled={draft.isDefault}
-              onClick={() => {
-                if (window.confirm(`Delete profile "${draft.name}"?`)) void deleteProfile(draft.id);
-              }}
-            >
-              Delete
-            </button>
-          </div>
 
           <div className={styles.cardHeader}>
             <h3>Automatic Activation</h3>
@@ -191,13 +150,26 @@ export function ProfilesPage() {
             >
               <input
                 className={styles.grow}
-                placeholder="C:\Games\game.exe or game.exe"
+                placeholder="C:\Games\game.exe or game.exe, then Enter"
                 value={newPath}
                 onChange={(e) => {
                   setNewPath(e.target.value);
                 }}
               />
-              <button type="submit">Add path</button>
+              <label className={styles.button}>
+                Add path…
+                <input
+                  type="file"
+                  accept=".exe"
+                  hidden
+                  onChange={(e) => {
+                    // Webviews only expose the file name, which the matcher accepts.
+                    const file = e.currentTarget.files?.[0];
+                    if (file) addPath(file.name);
+                    e.currentTarget.value = '';
+                  }}
+                />
+              </label>
               <button
                 type="button"
                 onClick={() => {
