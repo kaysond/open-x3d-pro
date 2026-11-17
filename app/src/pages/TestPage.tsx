@@ -1,4 +1,5 @@
 import { AxisBar, ButtonGrid, HatRose } from '../components/live';
+import { OUT_MAX } from '../lib/pipeline';
 import { useStore } from '../store';
 import styles from '../styles/ui.module.css';
 import { AXES, AXIS_LABELS, OUTPUT_BUTTONS, PHYSICAL_BUTTONS } from '../types';
@@ -13,7 +14,7 @@ export function TestPage() {
     <div className={styles.stack}>
       <section className={styles.card}>
         <h2>
-          Axes <span className={styles.muted}>— raw (device units) / processed (0..65535)</span>
+          Axes <span className={styles.muted}>— raw (device units) / processed (−1..1)</span>
         </h2>
         {AXES.map((id) => (
           <div key={id} className={styles.axisPair}>
@@ -23,7 +24,14 @@ export function TestPage() {
               max={id === 'x' || id === 'y' ? 1023 : 255}
               centered={id !== 'slider'}
             />
-            <AxisBar label={`${AXIS_LABELS[id]} out`} value={processed[id]} max={65535} centered={id !== 'slider'} />
+            <AxisBar
+              label={`${AXIS_LABELS[id]} out`}
+              value={processed[id]}
+              min={-OUT_MAX}
+              max={OUT_MAX}
+              centered
+              text={(processed[id] / OUT_MAX).toFixed(3)}
+            />
           </div>
         ))}
       </section>
@@ -45,9 +53,7 @@ export function TestPage() {
         </section>
       </div>
 
-      <p className={styles.muted}>
-        Report rate {hz} Hz · seq {frame.seq}
-      </p>
+      <p className={styles.muted}>Report rate {hz} Hz</p>
     </div>
   );
 }

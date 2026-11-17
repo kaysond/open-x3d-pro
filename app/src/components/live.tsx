@@ -5,13 +5,15 @@ import { cx } from './controls';
 interface AxisBarProps {
   label: string;
   value: number;
+  min?: number;
   max: number;
   /** Fill grows from the middle; for axes that rest at centre. */
   centered?: boolean;
+  text?: string;
 }
 
-export function AxisBar({ label, value, max, centered = false }: AxisBarProps) {
-  const pct = clamp(value / max, 0, 1) * 100;
+export function AxisBar({ label, value, min = 0, max, centered = false, text }: AxisBarProps) {
+  const pct = clamp((value - min) / (max - min), 0, 1) * 100;
   const fill = centered ? { left: `${Math.min(pct, 50)}%`, width: `${Math.abs(pct - 50)}%` } : { width: `${pct}%` };
   return (
     <div className={styles.axisBar}>
@@ -20,9 +22,7 @@ export function AxisBar({ label, value, max, centered = false }: AxisBarProps) {
         <div className={styles.fill} style={fill} />
         {centered && <div className={styles.centerLine} />}
       </div>
-      <span className={styles.axisValue}>
-        {value} / {max}
-      </span>
+      <span className={styles.axisValue}>{text ?? `${value} / ${max}`}</span>
     </div>
   );
 }

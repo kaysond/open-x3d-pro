@@ -1,14 +1,12 @@
 //! The 240-byte `X3D_CONFIG` blob the driver consumes (CONTRACT §4.2).
 
-use crate::config::{CurveMode, DeviceConfig, HatMode};
+use crate::config::{DeviceConfig, HatMode};
 use crate::pipeline::build_lut;
 
 pub const BLOB_LEN: usize = 240;
 pub const MAGIC: u32 = 0x5044_3358; // "X3DP"
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 
-pub const MODE_SYMMETRIC: u8 = 0;
-pub const MODE_FULL: u8 = 1;
 pub const TARGET_DISABLED: u8 = 0xFF;
 pub const HAT_HAT: u8 = 0;
 pub const HAT_BUTTONS: u8 = 1;
@@ -24,7 +22,6 @@ pub struct CompiledAxis {
     pub dz_min: u16,
     pub dz_max: u16,
     pub invert: u8,
-    pub mode: u8,
     pub target: u8,
     pub lut: [u16; 17],
 }
@@ -52,10 +49,6 @@ impl CompiledConfig {
                 dz_min,
                 dz_max,
                 invert: a.invert.into(),
-                mode: match a.curve_mode {
-                    CurveMode::Symmetric => MODE_SYMMETRIC,
-                    CurveMode::Full => MODE_FULL,
-                },
                 target: a.target.map_or(TARGET_DISABLED, |t| t.index() as u8),
                 lut: build_lut(&a.curve, a.sensitivity),
             }
@@ -90,7 +83,7 @@ impl CompiledConfig {
             ] {
                 v.extend_from_slice(&w.to_le_bytes());
             }
-            v.extend_from_slice(&[a.invert, a.mode, a.target, 0]);
+            v.extend_from_slice(&[a.invert, a.target, 0, 0]);
             for w in a.lut {
                 v.extend_from_slice(&w.to_le_bytes());
             }
@@ -143,16 +136,16 @@ mod tests {
     fn identity_blob_layout() {
         let b = compile(&DeviceConfig::default());
         assert_eq!(&b[0..4], b"X3DP");
-        assert_eq!(&b[4..8], &[1, 0, 240, 0]);
+        assert_eq!(&b[4..8], &[2, 0, 240, 0]);
         // The driver's built-in identity blob must carry the same CRC.
-        assert_eq!(blob_crc(&b), 0x6AE1_FFEB);
-        // X axis: cal 0/32768/65535, dz 0, invert 0, mode 0, target 0, lut[0] = 0, lut[16] = 65535.
+        assert_eq!(blob_crc(&b), 0x9EA3_E13D);
+        // X axis: cal 0/32768/65535, dz 0, invert 0, target 0, lut[0] = 0, lut[16] = 32767.
         assert_eq!(&b[12..18], &[0, 0, 0, 0x80, 0xFF, 0xFF]);
         assert_eq!(&b[24..28], &[0, 0, 0, 0]);
-        assert_eq!(&b[60..62], &[0xFF, 0xFF]);
-        // Slider (axis 3) at 12 + 150: center 0, mode full, target 3.
-        assert_eq!(&b[162..168], &[0, 0, 0, 0, 0xFF, 0xFF]);
-        assert_eq!(&b[174..178], &[0, 1, 3, 0]);
+        assert_eq!(&b[60..62], &[0xFF, 0x7F]);
+        // Slider (axis 3) at 12 + 150: target 3.
+        assert_eq!(&b[162..168], &[0, 0, 0, 0x80, 0xFF, 0xFF]);
+        assert_eq!(&b[174..178], &[0, 3, 0, 0]);
         assert_eq!(b[212], HAT_HAT);
         assert_eq!(b[213], 0);
         assert_eq!(&b[214..226], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
@@ -172,8 +165,8 @@ mod tests {
         let b = compile(&c);
         assert_eq!(&b[18..20], &[50, 0]);
         assert_eq!(b[24], 1);
-        assert_eq!(b[12 + 50 + 14], TARGET_DISABLED);
-        assert_eq!(b[12 + 150 + 14], 0);
+        assert_eq!(b[12 + 50 + 13], TARGET_DISABLED);
+        assert_eq!(b[12 + 150 + 13], 0);
         assert_eq!(&b[212..214], &[HAT_BOTH, 3]);
         assert_eq!(b[226], 32);
         assert_eq!(blob_crc(&b), crc32(&b[12..]));

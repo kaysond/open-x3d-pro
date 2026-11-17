@@ -10,7 +10,7 @@ const DCS_EXE = 'C:\\Program Files\\Eagle Dynamics\\DCS World\\bin\\DCS.exe';
 function dcsConfig(): DeviceConfig {
   const c = defaultDeviceConfig();
   for (const id of ['x', 'y'] as const) {
-    c.axes[id].curve = { type: 'exponent', exponent: 1.8 };
+    c.axes[id].curve = { type: 'points', points: [[0, 0], [0.25, 0.1], [0.5, 0.3], [0.75, 0.6], [1, 1]] };
     c.axes[id].deadzone.center = 0.04;
   }
   c.axes.rz.curve = { type: 'points', points: [[0, 0], [0.5, 0.25], [1, 1]] };
@@ -155,7 +155,9 @@ export function createMockTransport(): Transport {
       if (!c) throw new Error(`Calibration of ${axis} was not started`);
       calibrating[axis] = undefined;
       if (c.min >= c.max) throw new Error('the axis did not move; sweep it through its full range');
-      return { min: c.min, center: toRaw16(axis, raw[axis]), max: c.max };
+      // The throttle has no rest position, so its center is the midpoint (as the backend does).
+      const center = axis === 'slider' ? c.min + Math.floor((c.max - c.min) / 2) : toRaw16(axis, raw[axis]);
+      return { min: c.min, center, max: c.max };
     },
     import_profile: ({ json }) => {
       const p = JSON.parse(json) as Partial<Profile>;

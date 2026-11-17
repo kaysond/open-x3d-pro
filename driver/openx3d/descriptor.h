@@ -13,12 +13,13 @@ static const UCHAR G_ReportDescriptor[] = {
     0x09, 0x31,                   /*   Usage (Y) */
     0x09, 0x35,                   /*   Usage (Rz) */
     0x09, 0x36,                   /*   Usage (Slider) */
-    0x15, 0x00,                   /*   Logical Minimum (0) */
-    0x27, 0xFF, 0xFF, 0x00, 0x00, /*   Logical Maximum (65535); 4-byte form, 2-byte would be -1 */
+    0x16, 0x01, 0x80,             /*   Logical Minimum (-32767): symmetric, so center is exactly 0 */
+    0x26, 0xFF, 0x7F,             /*   Logical Maximum (32767) */
     0x75, 0x10,                   /*   Report Size (16) */
     0x95, 0x04,                   /*   Report Count (4) */
     0x81, 0x02,                   /*   Input (Data,Var,Abs) */
     0x09, 0x39,                   /*   Usage (Hat switch) */
+    0x15, 0x00,                   /*   Logical Minimum (0) */
     0x25, 0x07,                   /*   Logical Maximum (7) */
     0x35, 0x00,                   /*   Physical Minimum (0) */
     0x46, 0x3B, 0x01,             /*   Physical Maximum (315) */
@@ -58,7 +59,7 @@ static const UCHAR G_ReportDescriptor[] = {
     0xB1, 0x02,                   /*   Feature (Data,Var,Abs): driver info, GET only */
     0xC0,                         /* End Collection */
 };
-C_ASSERT(sizeof(G_ReportDescriptor) == 106);
+C_ASSERT(sizeof(G_ReportDescriptor) == 107);
 
 static const HID_DESCRIPTOR G_HidDescriptor = {
     0x09,                         /* bLength */

@@ -60,7 +60,16 @@ fn scenarios() -> Vec<(&'static str, DeviceConfig)> {
         }
     };
     let five = Curve::Points {
-        points: vec![[0.0, 0.0], [0.2, 0.05], [0.5, 0.3], [0.8, 0.7], [1.0, 1.0]],
+        points: vec![
+            [0.0, 0.0],
+            [0.25, 0.05],
+            [0.5, 0.3],
+            [0.75, 0.7],
+            [1.0, 1.0],
+        ],
+    };
+    let offset = Curve::Points {
+        points: vec![[0.0, 0.2], [0.1875, 0.25], [1.0, 0.9]],
     };
     vec![
         ("identity", base()),
@@ -79,7 +88,7 @@ fn scenarios() -> Vec<(&'static str, DeviceConfig)> {
                 };
                 c.axes.slider.calibration = Calibration {
                     min: 16 << 8,
-                    center: 16 << 8,
+                    center: 128 << 8,
                     max: 240 << 8,
                 };
             }),
@@ -109,15 +118,14 @@ fn scenarios() -> Vec<(&'static str, DeviceConfig)> {
                 c.axes.slider.deadzone.max = 0.15;
             }),
         ),
-        (
-            "exponent_0_5",
-            with(&|c| all(c, &|a| a.curve = Curve::Exponent { exponent: 0.5 })),
-        ),
-        (
-            "exponent_2_0",
-            with(&|c| all(c, &|a| a.curve = Curve::Exponent { exponent: 2.0 })),
-        ),
         ("points_5", with(&|c| all(c, &|a| a.curve = five.clone()))),
+        (
+            "points_offset",
+            with(&|c| {
+                all(c, &|a| a.curve = offset.clone());
+                c.axes.y.deadzone.center = 0.1;
+            }),
+        ),
         (
             "sensitivity_2_0_clamp",
             with(&|c| all(c, &|a| a.sensitivity = 2.0)),
@@ -172,7 +180,7 @@ fn scenarios() -> Vec<(&'static str, DeviceConfig)> {
                 c.axes.x.invert = true;
                 c.axes.x.deadzone.center = 0.08;
                 c.axes.x.deadzone.max = 0.1;
-                c.axes.x.curve = Curve::Exponent { exponent: 1.7 };
+                c.axes.x.curve = offset.clone();
                 c.axes.x.sensitivity = 1.3;
                 c.axes.y.curve = five.clone();
                 c.axes.y.deadzone.min = 0.05;

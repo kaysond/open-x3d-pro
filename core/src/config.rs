@@ -1,5 +1,6 @@
 //! Profile and device configuration types (CONTRACT §3), shared with the frontend as JSON.
 
+use crate::pipeline::interpolate;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -41,19 +42,25 @@ impl Deadzone {
     }
 }
 
+/// Curve x positions live on the LUT's 1/16 grid, so the driver's table passes through every point.
+pub const CURVE_STEPS: f64 = 16.0;
+
+fn on_grid(x: f64) -> bool {
+    (x * CURVE_STEPS).fract() == 0.0
+}
+
+/// Output magnitude for deflection magnitude, mirrored for negative deflection.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Curve {
     Linear,
-    Exponent { exponent: f64 },
-    Points { points: Vec<[f64; 2]> },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CurveMode {
-    Symmetric,
-    Full,
+    Points {
+        points: Vec<[f64; 2]>,
+    },
+    /// v0.1.0 profiles only; [`DeviceConfig::upgrade`] turns it into points.
+    Exponent {
+        exponent: f64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,40 +71,29 @@ pub struct AxisConfig {
     pub deadzone: Deadzone,
     pub curve: Curve,
     pub sensitivity: f64,
-    pub curve_mode: CurveMode,
     pub target: Option<AxisId>,
 }
 
 impl AxisConfig {
     pub fn identity(axis: AxisId) -> Self {
-        let full = axis == AxisId::Slider;
         AxisConfig {
             calibration: Calibration {
                 min: 0,
-                center: if full { 0 } else { 32768 },
+                center: 32768,
                 max: 65535,
             },
             invert: false,
             deadzone: Deadzone::default(),
             curve: Curve::Linear,
             sensitivity: 1.0,
-            curve_mode: if full {
-                CurveMode::Full
-            } else {
-                CurveMode::Symmetric
-            },
             target: Some(axis),
         }
     }
 
     fn validate(&self) -> Result<(), String> {
         let Calibration { min, center, max } = self.calibration;
-        match self.curve_mode {
-            CurveMode::Symmetric if !(min < center && center < max) => {
-                return Err("calibration needs min < center < max".into())
-            }
-            CurveMode::Full if min >= max => return Err("calibration needs min < max".into()),
-            _ => {}
+        if !(min < center && center < max) {
+            return Err("calibration needs min < center < max".into());
         }
         let d = self.deadzone;
         if ![d.center, d.min, d.max]
@@ -116,11 +112,7 @@ impl AxisConfig {
         }
         match &self.curve {
             Curve::Linear => {}
-            Curve::Exponent { exponent } => {
-                if !(0.2..=5.0).contains(exponent) {
-                    return Err("curve exponent must be within 0.2..5".into());
-                }
-            }
+            Curve::Exponent { .. } => return Err("exponent curves are no longer supported".into()),
             Curve::Points { points } => {
                 if !(2..=17).contains(&points.len()) {
                     return Err("curve needs 2..17 points".into());
@@ -131,9 +123,49 @@ impl AxisConfig {
                 if !points.windows(2).all(|w| w[0][0] < w[1][0]) {
                     return Err("curve point x values must be strictly increasing".into());
                 }
+                if !points.iter().all(|p| on_grid(p[0])) {
+                    return Err("curve point x values must be multiples of 1/16".into());
+                }
+                if !points.windows(2).all(|w| w[0][1] <= w[1][1]) {
+                    return Err("curve must not decrease".into());
+                }
             }
         }
         Ok(())
+    }
+
+    /// Converts v0.1.0 settings: full-range axes get a center; exponent, off-grid and decreasing
+    /// curves become non-decreasing grid points.
+    fn upgrade(&mut self) {
+        let Calibration { min, center, max } = self.calibration;
+        if !(min < center && center < max) && max.saturating_sub(min) >= 2 {
+            self.calibration.center = min + (max - min) / 2;
+        }
+        let mut points = match &self.curve {
+            Curve::Linear => return,
+            Curve::Exponent { exponent } => {
+                let e = *exponent;
+                (0..=8)
+                    .map(|i| f64::from(i) / 8.0)
+                    .map(|x| [x, x.powf(e)])
+                    .collect()
+            }
+            Curve::Points { points } if !points.iter().all(|p| on_grid(p[0])) => {
+                let mut xs: Vec<f64> = points
+                    .iter()
+                    .map(|p| (p[0] * CURVE_STEPS).round() / CURVE_STEPS)
+                    .collect();
+                xs.dedup();
+                xs.iter().map(|&x| [x, interpolate(points, x)]).collect()
+            }
+            Curve::Points { points } => points.clone(),
+        };
+        let mut top = 0.0f64;
+        for p in &mut points {
+            top = top.max(p[1]);
+            p[1] = top;
+        }
+        self.curve = Curve::Points { points };
     }
 }
 
@@ -208,6 +240,18 @@ impl Default for DeviceConfig {
 }
 
 impl DeviceConfig {
+    /// Rewrites settings older releases allowed into their current form; call before [`Self::validate`].
+    pub fn upgrade(&mut self) {
+        for a in [
+            &mut self.axes.x,
+            &mut self.axes.y,
+            &mut self.axes.rz,
+            &mut self.axes.slider,
+        ] {
+            a.upgrade();
+        }
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         for (name, axis) in ["x", "y", "rz", "slider"].iter().zip(self.axes.all()) {
             axis.validate().map_err(|e| format!("axis {name}: {e}"))?;
@@ -282,8 +326,7 @@ mod tests {
     fn default_is_valid_identity() {
         let c = DeviceConfig::default();
         c.validate().unwrap();
-        assert_eq!(c.axes.slider.calibration.center, 0);
-        assert_eq!(c.axes.slider.curve_mode, CurveMode::Full);
+        assert_eq!(c.axes.slider.calibration.center, 32768);
         assert_eq!(c.axes.rz.target, Some(AxisId::Rz));
         assert_eq!(c.buttons[11].output, Some(12));
         assert!(c.buttons_shifted.iter().all(|b| b.output.is_none()));
@@ -293,7 +336,6 @@ mod tests {
     fn json_shape_matches_contract() {
         let v = serde_json::to_value(DeviceConfig::default()).unwrap();
         assert_eq!(v["hatMode"], "hat");
-        assert_eq!(v["axes"]["x"]["curveMode"], "symmetric");
         assert_eq!(v["axes"]["x"]["curve"], json!({ "type": "linear" }));
         assert_eq!(v["axes"]["slider"]["target"], "slider");
         assert_eq!(v["buttons"][0], json!({ "output": 1 }));
@@ -339,7 +381,12 @@ mod tests {
         });
         invalid(|c| c.axes.rz.sensitivity = 4.5);
         invalid(|c| c.axes.rz.sensitivity = f64::NAN);
-        invalid(|c| c.axes.x.curve = Curve::Exponent { exponent: 0.1 });
+        invalid(|c| c.axes.x.curve = Curve::Exponent { exponent: 2.0 });
+        invalid(|c| {
+            c.axes.x.curve = Curve::Points {
+                points: vec![[0.0, 0.0], [0.3, 0.2], [1.0, 1.0]],
+            }
+        });
         invalid(|c| {
             c.axes.x.curve = Curve::Points {
                 points: vec![[0.0, 0.0]],
@@ -355,6 +402,11 @@ mod tests {
                 points: vec![[0.0, 0.0], [1.0, 1.2]],
             }
         });
+        invalid(|c| {
+            c.axes.x.curve = Curve::Points {
+                points: vec![[0.0, 0.0], [0.5, 0.6], [1.0, 0.4]],
+            }
+        });
         invalid(|c| c.buttons[3].output = Some(33));
         assert!(invalid(|c| c.buttons_shifted[0].output = Some(0)).starts_with("shifted button 1"));
         invalid(|c| c.shift_button = Some(13));
@@ -364,6 +416,37 @@ mod tests {
                 keys: vec![],
             })
         });
+    }
+
+    #[test]
+    fn upgrade_converts_v0_1_profiles() {
+        let mut v = serde_json::to_value(DeviceConfig::default()).unwrap();
+        v["axes"]["slider"]["calibration"] = json!({ "min": 4096, "center": 4096, "max": 61440 });
+        v["axes"]["slider"]["curveMode"] = json!("full");
+        v["axes"]["x"]["curve"] = json!({ "type": "exponent", "exponent": 2.0 });
+        v["axes"]["rz"]["curve"] =
+            json!({ "type": "points", "points": [[0, 0], [0.5, 0.6], [1, 0.4]] });
+        v["axes"]["y"]["curve"] =
+            json!({ "type": "points", "points": [[0, 0], [0.3, 0.1], [0.32, 0.2], [1, 1]] });
+        let mut c: DeviceConfig = serde_json::from_value(v).unwrap();
+        c.upgrade();
+        c.validate().unwrap();
+        assert_eq!(c.axes.slider.calibration.center, 32768);
+        let Curve::Points { points } = &c.axes.x.curve else {
+            panic!()
+        };
+        assert_eq!((points.len(), points[4]), (9, [0.5, 0.25]));
+        let Curve::Points { points } = &c.axes.y.curve else {
+            panic!()
+        };
+        assert_eq!(points.len(), 3);
+        assert_eq!(points[1][0], 0.3125);
+        assert_eq!(
+            c.axes.rz.curve,
+            Curve::Points {
+                points: vec![[0.0, 0.0], [0.5, 0.6], [1.0, 0.6]]
+            }
+        );
     }
 
     #[test]

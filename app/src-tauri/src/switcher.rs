@@ -288,7 +288,9 @@ mod tests {
         settings.switching_paused = false;
 
         let mut preview = DeviceConfig::default();
-        preview.axes.y.curve = Curve::Exponent { exponent: 3.0 };
+        preview.axes.y.curve = Curve::Points {
+            points: vec![[0.0, 0.0], [0.5, 0.1], [1.0, 1.0]],
+        };
         s.set_preview(preview.clone());
         assert_eq!(s.evaluate(&ps, &settings), None);
         assert_eq!(s.compiled(), &CompiledConfig::from_config(&preview));

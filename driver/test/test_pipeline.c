@@ -22,14 +22,15 @@ static size_t hex(const char *s, uint8_t *out, size_t cap)
 
 typedef struct {
     uint8_t raw[X3D_RAW_SIZE];
-    unsigned long long x, y, rz, slider, hat, buttons;
+    long long x, y, rz, slider;
+    unsigned long long hat, buttons;
 } test_case;
 
 static int failures, total;
 
-static int near(unsigned got, unsigned long long want)
+static int near(int got, long long want)
 {
-    return (unsigned long long)got + 1 >= want && got <= want + 1;
+    return got + 1 >= want && got <= want + 1;
 }
 
 static void run_case(const char *name, int idx, const X3D_CONFIG *cfg, const test_case *c)
@@ -41,9 +42,9 @@ static void run_case(const char *name, int idx, const X3D_CONFIG *cfg, const tes
         r.hat == c->hat && r.buttons == c->buttons)
         return;
     failures++;
-    printf("FAIL %s[%d]: got x=%u y=%u rz=%u slider=%u hat=%u buttons=0x%08X\n", name, idx, r.x, r.y, r.rz,
+    printf("FAIL %s[%d]: got x=%d y=%d rz=%d slider=%d hat=%u buttons=0x%08X\n", name, idx, r.x, r.y, r.rz,
            r.slider, r.hat, (unsigned)r.buttons);
-    printf("           want x=%llu y=%llu rz=%llu slider=%llu hat=%llu buttons=0x%08llX\n", c->x, c->y, c->rz,
+    printf("           want x=%lld y=%lld rz=%lld slider=%lld hat=%llu buttons=0x%08llX\n", c->x, c->y, c->rz,
            c->slider, c->hat, c->buttons);
 }
 
@@ -81,7 +82,7 @@ static int run_file(const char *path)
                     failures++;
                 }
             }
-        } else if (sscanf(line, "C %14s %llu %llu %llu %llu %llu %llu", hexbuf, &c.x, &c.y, &c.rz, &c.slider, &c.hat,
+        } else if (sscanf(line, "C %14s %lld %lld %lld %lld %llu %llu", hexbuf, &c.x, &c.y, &c.rz, &c.slider, &c.hat,
                           &c.buttons) == 7 &&
                    hex(hexbuf, c.raw, sizeof(c.raw)) == X3D_RAW_SIZE) {
             if (have_cfg)
@@ -129,7 +130,7 @@ static int self_checks(void)
         switch (k) {
         case 0: c.axes[0].cal_center = c.axes[0].cal_max; break;
         case 1: c.axes[2].dz_center = 500; c.axes[2].dz_max = 500; break;
-        case 2: c.axes[1].mode = 2; break;
+        case 2: c.axes[1].lut[16] = X3D_OUT_MAX + 1; break;
         case 3: c.axes[3].target = 4; break;
         case 4: c.hat_mode = 3; break;
         default: c.button_map_shift[5] = 33; break;

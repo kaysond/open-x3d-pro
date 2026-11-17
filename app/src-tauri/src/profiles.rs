@@ -95,7 +95,10 @@ impl ProfileStore {
             let parsed = fs::read_to_string(&path)
                 .map_err(StoreError::from)
                 .and_then(|s| Ok(serde_json::from_str::<Profile>(&s)?))
-                .and_then(|p| validate_config(&p.config).map(|()| p));
+                .and_then(|mut p| {
+                    p.config.upgrade();
+                    validate_config(&p.config).map(|()| p)
+                });
             match parsed {
                 Ok(mut p) => {
                     p.id = id.to_string();
@@ -203,6 +206,7 @@ impl ProfileStore {
     /// Imports as a new, non-default profile.
     pub fn import(&mut self, json: &str) -> Result<Profile, StoreError> {
         let mut p: Profile = serde_json::from_str(json)?;
+        p.config.upgrade();
         p.id = new_id();
         p.is_default = false;
         self.save(p)

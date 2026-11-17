@@ -21,10 +21,8 @@ export interface Deadzone {
   max: number;
 }
 
-export type Curve =
-  | { type: 'linear' }
-  | { type: 'exponent'; exponent: number }
-  | { type: 'points'; points: [number, number][] };
+/** Output magnitude for deflection magnitude, mirrored for negative deflection. Point x is a multiple of 1/16. */
+export type Curve = { type: 'linear' } | { type: 'points'; points: [number, number][] };
 
 export interface AxisConfig {
   calibration: Calibration;
@@ -32,7 +30,6 @@ export interface AxisConfig {
   deadzone: Deadzone;
   curve: Curve;
   sensitivity: number;
-  curveMode: 'symmetric' | 'full';
   target: AxisId | null;
 }
 
@@ -87,6 +84,7 @@ export interface WindowInfo {
 
 export interface InputFrame {
   raw: { x: number; y: number; rz: number; slider: number; hat: number; buttons: number };
+  /** Axes are -OUT_MAX..OUT_MAX. */
   processed: { x: number; y: number; rz: number; slider: number; hat: number; buttons: number };
   seq: number;
 }
@@ -101,14 +99,12 @@ export const PHYSICAL_BUTTONS = 12;
 export const OUTPUT_BUTTONS = 32;
 
 function defaultAxis(id: AxisId): AxisConfig {
-  const full = id === 'slider';
   return {
-    calibration: { min: 0, center: full ? 0 : 32768, max: 65535 },
+    calibration: { min: 0, center: 32768, max: 65535 },
     invert: false,
     deadzone: { center: 0, min: 0, max: 0 },
     curve: { type: 'linear' },
     sensitivity: 1,
-    curveMode: full ? 'full' : 'symmetric',
     target: id,
   };
 }

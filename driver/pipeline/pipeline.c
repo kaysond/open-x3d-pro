@@ -27,11 +27,11 @@ static bool axis_valid(const X3D_AXIS_CONFIG *a)
     unsigned c = a->dz_center, lo = a->dz_min, hi = a->dz_max;
     if (a->invert > 1 || (a->target > X3D_AXIS_SLIDER && a->target != X3D_TARGET_NONE))
         return false;
-    if (a->mode == X3D_MODE_SYMMETRIC) {
-        if (!(a->cal_min < a->cal_center && a->cal_center < a->cal_max))
-            return false;
-    } else if (a->mode != X3D_MODE_FULL || a->cal_min >= a->cal_max) {
+    if (!(a->cal_min < a->cal_center && a->cal_center < a->cal_max))
         return false;
+    for (int k = 0; k <= 16; k++) {
+        if (a->lut[k] > X3D_OUT_MAX)
+            return false;
     }
     return c <= 500 && lo <= 500 && hi <= 500 && c + lo < 1000 && c + hi < 1000 && lo + hi < 1000;
 }
@@ -66,14 +66,12 @@ void pipeline_identity(X3D_CONFIG *out)
     out->size = X3D_CONFIG_SIZE;
     for (uint8_t i = 0; i < 4; i++) {
         X3D_AXIS_CONFIG *a = &out->axes[i];
-        bool full = i == X3D_AXIS_SLIDER;
         a->cal_min = 0;
-        a->cal_center = full ? 0 : 32768;
+        a->cal_center = 32768;
         a->cal_max = 65535;
-        a->mode = (uint8_t)(full ? X3D_MODE_FULL : X3D_MODE_SYMMETRIC);
         a->target = i;
         for (uint32_t k = 0; k <= 16; k++)
-            a->lut[k] = (uint16_t)((k * 65535u + 8u) / 16u); /* round(k*65535/16) */
+            a->lut[k] = (uint16_t)((k * X3D_OUT_MAX + 8u) / 16u); /* round(k*32767/16) */
     }
     out->hat_mode = (uint8_t)X3D_HAT_MODE_HAT;
     for (uint8_t i = 0; i < 12; i++)
@@ -96,24 +94,11 @@ static double lut_lookup(const X3D_AXIS_CONFIG *a, double x)
     return lo + (hi - lo) * (pos - (double)i);
 }
 
-static uint16_t to_u16(double v)
-{
-    return (uint16_t)(clamp(v, 0.0, 65535.0) + 0.5); /* round half up; v >= 0 here */
-}
-
 /* No denominator below can be zero for a config that passed pipeline_validate. */
-static uint16_t process_axis(const X3D_AXIS_CONFIG *a, unsigned raw16)
+static int16_t process_axis(const X3D_AXIS_CONFIG *a, unsigned raw16)
 {
     double r = raw16, min = a->cal_min, ctr = a->cal_center, max = a->cal_max;
     double dzc = a->dz_center / 1000.0, dzmin = a->dz_min / 1000.0, dzmax = a->dz_max / 1000.0;
-
-    if (a->mode == X3D_MODE_FULL) {
-        double v = clamp((r - min) / (max - min), 0.0, 1.0);
-        if (a->invert)
-            v = 1.0 - v;
-        v = clamp((v - dzmin) / (1.0 - dzmin - dzmax), 0.0, 1.0);
-        return to_u16(lut_lookup(a, v));
-    }
 
     double v = r <= ctr ? -(ctr - r) / (ctr - min) : (r - ctr) / (max - ctr);
     v = clamp(v, -1.0, 1.0);
@@ -122,11 +107,13 @@ static uint16_t process_axis(const X3D_AXIS_CONFIG *a, unsigned raw16)
     double m = v < 0.0 ? -v : v;
     double dz_end = v < 0.0 ? dzmin : dzmax;
     /* inside the centre deadzone sign(v) counts as 0, so a LUT with lut[0] > 0
-     * still rests at exactly 32768 (same as the Rust reference) */
+     * still rests at exactly 0 (same as the Rust reference) */
     if (m <= dzc)
-        return 32768;
+        return 0;
     m = clamp((m - dzc) / (1.0 - dzc - dz_end), 0.0, 1.0);
-    return to_u16(32768.0 + (v < 0.0 ? -1.0 : 1.0) * lut_lookup(a, m) / 2.0);
+    double out = lut_lookup(a, m); /* 0..X3D_OUT_MAX */
+    /* round half away from zero, as Rust's f64::round */
+    return (int16_t)(v < 0.0 ? -(out + 0.5) : out + 0.5);
 }
 
 /* Hat 0..7 clockwise from north -> output buttons 13..16 (U, R, D, L) as bit masks. */
@@ -148,7 +135,7 @@ void pipeline_process(const X3D_CONFIG *cfg, const uint8_t raw[X3D_RAW_SIZE], X3
     unsigned hat = raw[2] >> 4;
     unsigned pressed = raw[4] | ((raw[6] & 0x0Fu) << 8);
     unsigned phys16[4];
-    uint16_t axes[4];
+    int16_t axes[4] = {0, 0, 0, 0};
     uint32_t buttons = 0;
 
     /* assigned, not brace-initialised: MSVC C warns (C4204) on non-constant initialisers */
@@ -156,8 +143,6 @@ void pipeline_process(const X3D_CONFIG *cfg, const uint8_t raw[X3D_RAW_SIZE], X3
     phys16[X3D_AXIS_Y] = y << 6;
     phys16[X3D_AXIS_RZ] = (unsigned)raw[3] << 8;
     phys16[X3D_AXIS_SLIDER] = (unsigned)raw[5] << 8;
-    for (int i = 0; i < 4; i++)
-        axes[i] = (uint16_t)(cfg->axes[i].mode == X3D_MODE_FULL ? 0 : 32768);
     /* ascending order: when two physical axes share a target, the higher index wins */
     for (int i = 0; i < 4; i++) {
         uint8_t t = cfg->axes[i].target;

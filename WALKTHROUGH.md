@@ -65,8 +65,10 @@ Pure Rust, no platform code, runs on any OS. Everything else depends on its defi
 - [core/src/lib.rs](core/src/lib.rs): declares the five modules below.
 - [core/src/config.rs](core/src/config.rs): the human-level data model, serialized as
   camelCase JSON to profile files and to the UI.
-  - `AxisId` (x, y, rz, slider), `Calibration`, `Deadzone`, `Curve` (linear / exponent /
-    points), `CurveMode` (symmetric about centre, or full range for the throttle).
+  - `AxisId` (x, y, rz, slider), `Calibration`, `Deadzone`, `Curve` (linear, or points on
+    the 1/16 grid, mirrored for negative deflection). Every axis, throttle included, is
+    symmetric about its calibrated center. `DeviceConfig::upgrade` converts v0.1.0 profiles
+    (full-range throttle, exponent curves, off-grid points).
   - `AxisConfig` with `identity()` and `validate()` (ranges, strictly increasing curve
     points, deadzones that leave a live range).
   - `DeviceConfig`: four axes, `HatMode`, 12 `ButtonBinding`s, optional shift button and a
@@ -78,8 +80,8 @@ Pure Rust, no platform code, runs on any OS. Everything else depends on its defi
   point.
   - `RawReport::parse` / `to_bytes`: bit layout of the stick's 7-byte report (10-bit X/Y,
     8-bit twist and throttle, 4-bit hat, 12 buttons). `raw16()` scales axes to 16 bits.
-  - `build_lut`: turns a `Curve` + sensitivity into a 17-point lookup table.
-  - `process_axis`: calibrate → invert → deadzones → LUT, for symmetric and full modes.
+  - `build_lut`: turns a `Curve` + sensitivity into a 17-point lookup table (0..32767).
+  - `process_axis`: calibrate → invert → deadzones → LUT, output -32767..32767.
   - `process`: whole report. Routes each physical axis to its target, applies the shift
     layer and button map, converts the hat to buttons 13..16 when asked. Returns `JoyReport`.
 - [core/src/blob.rs](core/src/blob.rs): the 240-byte `X3D_CONFIG` wire format the driver
@@ -303,8 +305,10 @@ and events; in a plain browser it runs against an in-memory mock.
 - [app/src/components/live.tsx](app/src/components/live.tsx): read-only live widgets:
   `AxisBar`, `ButtonGrid`, `HatRose`.
 - [app/src/components/CurveEditor.tsx](app/src/components/CurveEditor.tsx): SVG response
-  curve. Draws the actual 17-point LUT, a live input marker, and for point curves handles
-  click-to-add, drag, and double-click-to-delete while keeping x strictly increasing.
+  curve over -1..1 deflection and output. Draws the driver's exact response (deadzone bands,
+  17-point LUT, mirrored), a dashed linear reference at the current sensitivity, a live
+  marker, and hover readouts (point position, segment slope). Point curves add
+  click-to-add, drag, and double-click-to-delete, with x snapped to the 1/16 LUT grid.
 
 ### 5.4 Pages
 
@@ -312,7 +316,7 @@ and events; in a plain browser it runs against an in-memory mock.
   buttons, and report rate. The first place to look when checking hardware.
 - [app/src/pages/AxesPage.tsx](app/src/pages/AxesPage.tsx): per-axis editor: calibration
   fields and wizard (`start_calibration` / `finish_calibration`), output axis, invert,
-  curve mode, deadzones, sensitivity, curve type and the `CurveEditor`.
+  deadzones, sensitivity, and the custom-curve switch with the `CurveEditor`.
 - [app/src/pages/ButtonsPage.tsx](app/src/pages/ButtonsPage.tsx): button map with shift
   layer, hat mode, and key bindings with live chord capture (Esc cancels).
 - [app/src/pages/ProfilesPage.tsx](app/src/pages/ProfilesPage.tsx): profile list,

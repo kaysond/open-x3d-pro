@@ -34,15 +34,21 @@ impl Calibrator {
         }
     }
 
-    /// Min/max seen since `start`, center = the value at finish.
+    /// Min/max seen since `start`; center = the value at finish, or the midpoint for the
+    /// throttle, which has no rest position.
     pub fn finish(&mut self, axis: AxisId) -> Result<Calibration, &'static str> {
         let t = self.tracks[axis.index()]
             .take()
             .ok_or("calibration was not started for this axis")?;
-        let center = t.last.ok_or("no input received from the joystick")?;
+        let last = t.last.ok_or("no input received from the joystick")?;
         if t.min >= t.max {
             return Err("the axis did not move; sweep it through its full range");
         }
+        let center = if axis == AxisId::Slider {
+            t.min + (t.max - t.min) / 2
+        } else {
+            last
+        };
         Ok(Calibration {
             min: t.min,
             center,
@@ -92,7 +98,7 @@ mod tests {
             c.finish(AxisId::Slider),
             Ok(Calibration {
                 min: 0,
-                center: 0,
+                center: 100 << 8,
                 max: 200 << 8
             })
         );

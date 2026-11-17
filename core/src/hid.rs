@@ -76,12 +76,12 @@ pub fn parse_joystick_report(buf: &[u8]) -> Option<JoyReport> {
     if buf.len() < JOYSTICK_REPORT_LEN || buf[0] != REPORT_ID_JOYSTICK {
         return None;
     }
-    let u16_at = |o: usize| u16::from_le_bytes([buf[o], buf[o + 1]]);
+    let i16_at = |o: usize| i16::from_le_bytes([buf[o], buf[o + 1]]);
     Some(JoyReport {
-        x: u16_at(1),
-        y: u16_at(3),
-        rz: u16_at(5),
-        slider: u16_at(7),
+        x: i16_at(1),
+        y: i16_at(3),
+        rz: i16_at(5),
+        slider: i16_at(7),
         hat: buf[9] & 0x0F,
         buttons: u32::from_le_bytes([buf[10], buf[11], buf[12], buf[13]]),
     })
@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn descriptor_report_sizes() {
         let desc = driver_descriptor();
-        assert_eq!(desc.len(), 106);
+        assert_eq!(desc.len(), 107);
         let (bits, tops) = walk(&desc);
         assert_eq!(
             tops,
@@ -188,14 +188,14 @@ mod tests {
     fn report_codecs() {
         let mut b = [0u8; JOYSTICK_REPORT_LEN];
         b[0] = 1;
-        b[1..3].copy_from_slice(&65535u16.to_le_bytes());
-        b[7..9].copy_from_slice(&1234u16.to_le_bytes());
+        b[1..3].copy_from_slice(&32767i16.to_le_bytes());
+        b[7..9].copy_from_slice(&(-1234i16).to_le_bytes());
         b[9] = 0xF5;
         b[10..14].copy_from_slice(&0x8000_0001u32.to_le_bytes());
         let j = parse_joystick_report(&b).unwrap();
         assert_eq!(
             (j.x, j.slider, j.hat, j.buttons),
-            (65535, 1234, 5, 0x8000_0001)
+            (32767, -1234, 5, 0x8000_0001)
         );
         assert!(parse_joystick_report(&b[..13]).is_none());
 

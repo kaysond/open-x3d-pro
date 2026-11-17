@@ -1,69 +1,67 @@
-// TS port of CONTRACT §4.1 for the curve preview and the mock transport.
+// TS port of the reference pipeline (core/src/pipeline.rs) for the curve preview and the mock transport.
 // The backend/driver output is authoritative; this only has to agree within ±1 LSB.
 import type { AxisConfig, AxisId, Curve } from '../types';
+
+/** Axis output range is ±OUT_MAX, center 0. */
+export const OUT_MAX = 32767;
+/** The LUT has STEPS + 1 entries, for inputs i / STEPS. */
+export const STEPS = 16;
 
 export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 // Degenerate calibration (b <= 0) saturates instead of producing NaN.
 const div = (a: number, b: number) => (b > 0 ? a / b : a > 0 ? Infinity : a < 0 ? -Infinity : 0);
 
-export const toRaw16 = (axis: AxisId, raw: number) => (axis === 'x' || axis === 'y' ? raw << 6 : raw << 8);
+/** Left shift from device units (10-bit X/Y, 8-bit Rz/slider) to the 16-bit calibration units. */
+export const rawShift = (axis: AxisId) => (axis === 'x' || axis === 'y' ? 6 : 8);
+export const toRaw16 = (axis: AxisId, raw: number) => raw << rawShift(axis);
 
 export function curveAt(curve: Curve, x: number): number {
-  switch (curve.type) {
-    case 'linear':
-      return x;
-    case 'exponent':
-      return Math.pow(x, curve.exponent);
-    case 'points': {
-      const pts = curve.points;
-      let prev = pts[0];
-      if (!prev) return x;
-      for (const p of pts) {
-        if (x <= p[0]) {
-          return p[0] === prev[0] ? p[1] : prev[1] + ((x - prev[0]) / (p[0] - prev[0])) * (p[1] - prev[1]);
-        }
-        prev = p;
-      }
-      return prev[1];
+  if (curve.type === 'linear') return x;
+  const pts = curve.points;
+  let prev = pts[0];
+  if (!prev) return x;
+  for (const p of pts) {
+    if (x <= p[0]) {
+      return p[0] === prev[0] ? p[1] : prev[1] + ((x - prev[0]) / (p[0] - prev[0])) * (p[1] - prev[1]);
     }
+    prev = p;
   }
+  return prev[1];
 }
 
-/** 17 u16 entries, lut[i] = output for input i/16, sensitivity multiplied in. */
+/** STEPS + 1 entries in output units 0..OUT_MAX, lut[i] = output for input i / STEPS, sensitivity multiplied in. */
 export function buildLut(curve: Curve, sensitivity: number): number[] {
-  return Array.from({ length: 17 }, (_, i) =>
-    clamp(Math.round(curveAt(curve, i / 16) * sensitivity * 65535), 0, 65535),
+  return Array.from({ length: STEPS + 1 }, (_, i) =>
+    clamp(Math.round(curveAt(curve, i / STEPS) * sensitivity * OUT_MAX), 0, OUT_MAX),
   );
 }
 
 export function lutAt(lut: readonly number[], m: number): number {
-  const pos = clamp(m, 0, 1) * 16;
-  const i = Math.min(Math.floor(pos), 15);
+  const pos = clamp(m, 0, 1) * STEPS;
+  const i = Math.min(Math.floor(pos), STEPS - 1);
   const a = lut[i] ?? 0;
   const b = lut[i + 1] ?? a;
   return a + (pos - i) * (b - a);
 }
 
-/** Steps 2–4: signed magnitude in [-1,1] (symmetric) or [0,1] (full), i.e. the curve's input. */
-export function axisInput(cfg: AxisConfig, raw16: number): number {
+/** Calibrated, inverted deflection in [-1, 1], before deadzones. */
+export function deflection(cfg: AxisConfig, raw16: number): number {
   const { min, center, max } = cfg.calibration;
-  const dz = cfg.deadzone;
-  if (cfg.curveMode === 'full') {
-    let v = clamp(div(raw16 - min, max - min), 0, 1);
-    if (cfg.invert) v = 1 - v;
-    return clamp(div(v - dz.min, 1 - dz.min - dz.max), 0, 1);
-  }
-  let v = clamp(raw16 <= center ? -div(center - raw16, center - min) : div(raw16 - center, max - center), -1, 1);
-  if (cfg.invert) v = -v;
+  const v = clamp(raw16 <= center ? -div(center - raw16, center - min) : div(raw16 - center, max - center), -1, 1);
+  return cfg.invert ? -v : v;
+}
+
+/** Live range of the curve on one side: deflection between the center and end deadzones. */
+export const liveRange = (cfg: AxisConfig, negative: boolean) =>
+  1 - cfg.deadzone.center - (negative ? cfg.deadzone.min : cfg.deadzone.max);
+
+/** Output in LUT units (±OUT_MAX) for deflection v: deadzones, then the curve, mirrored for v < 0. */
+export function response(cfg: AxisConfig, lut: readonly number[], v: number): number {
   const m = Math.abs(v);
-  const end = v < 0 ? dz.min : dz.max;
-  const out = m <= dz.center ? 0 : clamp(div(m - dz.center, 1 - dz.center - end), 0, 1);
-  return v < 0 ? -out : out;
+  if (m <= cfg.deadzone.center) return 0;
+  return Math.sign(v) * lutAt(lut, div(m - cfg.deadzone.center, liveRange(cfg, v < 0)));
 }
 
 export function processAxis(cfg: AxisConfig, raw16: number): number {
-  const v = axisInput(cfg, raw16);
-  const lutval = lutAt(buildLut(cfg.curve, cfg.sensitivity), Math.abs(v));
-  if (cfg.curveMode === 'full') return Math.round(lutval);
-  return clamp(Math.round(32768 + (Math.sign(v) * lutval) / 2), 0, 65535);
+  return Math.round(response(cfg, buildLut(cfg.curve, cfg.sensitivity), deflection(cfg, raw16)));
 }

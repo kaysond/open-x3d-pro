@@ -1,31 +1,25 @@
 import { useState } from 'react';
-import { cx, Radio, Select, Slider, Toggle } from '../components/controls';
+import { cx, Select, Slider, Toggle } from '../components/controls';
 import { CurveEditor } from '../components/CurveEditor';
 import { api } from '../lib/ipc';
-import { axisInput, clamp, curveAt, toRaw16 } from '../lib/pipeline';
+import { clamp, deflection, OUT_MAX, rawShift, toRaw16 } from '../lib/pipeline';
 import { guard, useStore } from '../store';
 import styles from '../styles/ui.module.css';
-import type { AxisConfig, AxisId, Calibration, Curve } from '../types';
+import type { AxisConfig, AxisId, Calibration } from '../types';
 import { AXES, AXIS_LABELS } from '../types';
 
 const pct = (v: number) => `${Math.round(v * 100)} %`;
 // Two deadzones at 0.5 would leave no live range, which the backend rejects.
 const DZ_MAX = 0.49;
+const DZ_LABELS = { center: 'Center Deadzone', min: 'Low Deadzone', max: 'High Deadzone' } as const;
 
 const TARGETS: { value: AxisId | null; label: string }[] = [
   ...AXES.map((id) => ({ value: id, label: AXIS_LABELS[id] })),
   { value: null, label: 'Disabled' },
 ];
 
-function switchCurve(curve: Curve, type: Curve['type']): Curve {
-  if (type === 'linear') return { type };
-  if (type === 'exponent') return { type, exponent: 2 };
-  // Start the point editor from the current shape so switching does not jump.
-  return { type, points: [0, 0.25, 0.5, 0.75, 1].map((x): [number, number] => [x, curveAt(curve, x)]) };
-}
-
 /** Commits on blur or Enter, so typing a number never passes through invalid in-between values. */
-function CalInput({ value, disabled, onCommit }: { value: number; disabled: boolean; onCommit: (v: number) => void }) {
+function CalInput({ value, max, onCommit }: { value: number; max: number; onCommit: (v: number) => void }) {
   const [text, setText] = useState<string | null>(null);
   const commit = () => {
     if (text !== null && text.trim() !== '' && Number.isFinite(Number(text))) onCommit(Number(text));
@@ -35,9 +29,8 @@ function CalInput({ value, disabled, onCommit }: { value: number; disabled: bool
     <input
       type="number"
       min={0}
-      max={65535}
+      max={max}
       value={text ?? value}
-      disabled={disabled}
       onChange={(e) => {
         setText(e.target.value);
       }}
@@ -63,9 +56,9 @@ export function AxesPage() {
       mutate(c.axes[axis]);
     });
   };
-  const symmetric = cfg.curveMode === 'symmetric';
   const raw = frame?.raw[axis];
-  const input = raw === undefined ? null : axisInput(cfg, toRaw16(axis, raw));
+  const input = raw === undefined ? null : deflection(cfg, toRaw16(axis, raw));
+  const custom = cfg.curve.type === 'points';
   const output = frame && cfg.target !== null ? frame.processed[cfg.target] : null;
 
   const startCalibration = () =>
@@ -78,7 +71,7 @@ export function AxesPage() {
     guard(async () => {
       setCalibrating(null);
       const cal = await api.finishCalibration(axis);
-      if (symmetric && !(cal.min < cal.center && cal.center < cal.max)) {
+      if (!(cal.min < cal.center && cal.center < cal.max)) {
         throw new Error('the axis was not centred when Finish was clicked; calibrate again and let it return to centre');
       }
       edit((a) => {
@@ -90,11 +83,12 @@ export function AxesPage() {
     // There is no cancel command; finishing and dropping the result (or error) is the cancel.
     api.finishCalibration(axis).catch(() => undefined);
   };
-  const dzLabel = (key: 'center' | 'min' | 'max') =>
-    key === 'center' ? 'Centre deadzone' : `Deadzone at ${symmetric ? key : key === 'min' ? 'low' : 'high'} end`;
+  // Fields are in device units; the config stores 16-bit units.
+  const shift = rawShift(axis);
+  const deviceMax = 0xffff >> shift;
   const setCal = (key: keyof Calibration, value: number) => {
     edit((a) => {
-      a.calibration[key] = Math.round(clamp(value, 0, 65535));
+      a.calibration[key] = Math.round(clamp(value, 0, deviceMax)) << shift;
     });
   };
 
@@ -124,8 +118,8 @@ export function AxesPage() {
                 <label key={key} className={styles.field}>
                   <span className={styles.fieldLabel}>{key}</span>
                   <CalInput
-                    value={cfg.calibration[key]}
-                    disabled={key === 'center' && !symmetric}
+                    value={cfg.calibration[key] >> shift}
+                    max={deviceMax}
                     onCommit={(v) => {
                       setCal(key, v);
                     }}
@@ -136,7 +130,10 @@ export function AxesPage() {
             {calibrating === axis ? (
               <>
                 <p>
-                  Move the axis to both extremes, then return it to centre and click Finish. Live raw:{' '}
+                  {axis === 'slider'
+                    ? 'Move the throttle to both extremes, then click Finish.'
+                    : 'Move the axis to both extremes, then return it to center and click Finish.'}{' '}
+                  Live raw:{' '}
                   {raw ?? '—'}
                 </p>
                 <div className={styles.row}>
@@ -170,46 +167,21 @@ export function AxesPage() {
                 });
               }}
             />
-            <Radio
-              label="Curve mode"
-              value={cfg.curveMode}
-              options={[
-                { value: 'symmetric', label: 'Symmetric (about centre)' },
-                { value: 'full', label: 'Full range' },
-              ]}
-              onChange={(curveMode) => {
-                edit((a) => {
-                  a.curveMode = curveMode;
-                  const { min, center, max } = a.calibration;
-                  // Symmetric needs min < center < max (slider default has center = min).
-                  if (curveMode === 'symmetric' && !(min < center && center < max)) {
-                    // A range too narrow for a centre falls back to the identity calibration.
-                    a.calibration =
-                      max - min < 2
-                        ? { min: 0, center: 32768, max: 65535 }
-                        : { min, center: Math.round((min + max) / 2), max };
-                  }
-                });
-              }}
-            />
-            {(['center', 'min', 'max'] as const).map(
-              (key) =>
-                (symmetric || key !== 'center') && (
-                  <Slider
-                    key={key}
-                    label={dzLabel(key)}
-                    value={cfg.deadzone[key]}
-                    min={0}
-                    max={DZ_MAX}
-                    format={pct}
-                    onChange={(v) => {
-                      edit((a) => {
-                        a.deadzone[key] = v;
-                      });
-                    }}
-                  />
-                ),
-            )}
+            {(['center', 'min', 'max'] as const).map((key) => (
+              <Slider
+                key={key}
+                label={DZ_LABELS[key]}
+                value={cfg.deadzone[key]}
+                min={0}
+                max={DZ_MAX}
+                format={pct}
+                onChange={(v) => {
+                  edit((a) => {
+                    a.deadzone[key] = v;
+                  });
+                }}
+              />
+            ))}
             <Slider
               label="Sensitivity"
               value={cfg.sensitivity}
@@ -227,62 +199,47 @@ export function AxesPage() {
         </div>
 
         <section className={styles.card}>
-          <h2>Curve</h2>
-          <Radio
-            label="Type"
-            value={cfg.curve.type}
-            options={[
-              { value: 'linear', label: 'Linear' },
-              { value: 'exponent', label: 'Exponent' },
-              { value: 'points', label: 'Points' },
-            ]}
-            onChange={(type) => {
-              edit((a) => {
-                a.curve = switchCurve(a.curve, type);
-              });
-            }}
-          />
-          {cfg.curve.type === 'exponent' && (
-            <Slider
-              label="Exponent"
-              value={cfg.curve.exponent}
-              min={0.2}
-              max={5}
-              log
-              onChange={(exponent) => {
+          <div className={styles.cardHeader}>
+            <h2>Custom Curve</h2>
+            <input
+              type="checkbox"
+              role="switch"
+              className={styles.switch}
+              aria-label="Custom curve"
+              checked={custom}
+              onChange={(e) => {
+                const on = e.target.checked;
                 edit((a) => {
-                  a.curve = { type: 'exponent', exponent };
+                  // Start from the linear shape so turning it on does not change the output.
+                  a.curve = on
+                    ? // Mirrored, this is 5 points: both ends, the center, and halfway on each side.
+                      { type: 'points', points: [[0, 0], [0.5, 0.5], [1, 1]] }
+                    : { type: 'linear' };
                 });
               }}
             />
-          )}
-          <CurveEditor
-            curve={cfg.curve}
-            sensitivity={cfg.sensitivity}
-            input={input === null ? null : Math.abs(input)}
-            onChange={(curve) => {
-              edit((a) => {
-                a.curve = curve;
-              });
-            }}
-          />
-          <p className={styles.muted}>
-            {symmetric ? 'x = deflection from centre, either direction' : 'x = position along the full range'}
-            {cfg.curve.type === 'points' && ' · click to add, drag to move, double-click to delete'}
-          </p>
-          <p className={styles.mono}>
-            raw {raw ?? '—'} → in {input?.toFixed(3) ?? '—'} → out {output ?? '—'}
-          </p>
-          <button
-            onClick={() => {
-              edit((a) => {
-                a.curve = { type: 'linear' };
-                a.sensitivity = 1;
-              });
-            }}
-          >
-            Reset to linear
-          </button>
+          </div>
+          <fieldset className={styles.cardBody} disabled={!custom}>
+            <CurveEditor
+              axis={cfg}
+              input={input}
+              disabled={!custom}
+              onChange={(curve) => {
+                edit((a) => {
+                  a.curve = curve;
+                });
+              }}
+            />
+            {custom && (
+              <p className={styles.muted}>
+                Double-click to add or remove a point; drag to move one. The other side mirrors.
+              </p>
+            )}
+            <p className={styles.mono}>
+              raw {raw ?? '—'} → in {input?.toFixed(3) ?? '—'} → out{' '}
+              {output === null ? '—' : (output / OUT_MAX).toFixed(3)}
+            </p>
+          </fieldset>
         </section>
       </div>
     </div>
