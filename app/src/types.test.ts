@@ -5,7 +5,7 @@ it('default config is the identity from CONTRACT §3', () => {
   const c = defaultDeviceConfig();
   for (const id of ['x', 'y', 'rz', 'slider'] as const) {
     expect(c.axes[id]).toEqual({
-      calibration: { min: 0, center: 32768, max: 65535 },
+      calibration: { min: 0, center: 32768, max: id === 'x' || id === 'y' ? 1023 << 6 : 255 << 8 },
       invert: false,
       deadzone: { center: 0, min: 0, max: 0 },
       curve: { type: 'linear' },

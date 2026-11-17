@@ -237,12 +237,11 @@ mod tests {
             (0, 0, 0, -32767, 8, 0)
         );
         let r = run(&c, frame(1023, 0, 3, 255, 255, 0xFFF));
-        // 1023<<6 = 65472 of 65535 calibrated range.
-        assert!((32703..=32704).contains(&r.x), "{}", r.x);
+        assert_eq!(r.x, 32767);
         assert_eq!(r.y, -32767);
         assert_eq!(r.hat, 3);
         assert_eq!(r.buttons, 0xFFF);
-        assert!((32511..=32512).contains(&r.slider), "{}", r.slider);
+        assert_eq!(r.slider, 32767);
     }
 
     #[test]
@@ -275,8 +274,10 @@ mod tests {
         assert!(r.x >= 32766, "{}", r.x);
         assert_eq!(r.slider, 32767);
         let r = run(&c, frame(768, 512, 8, 128, 255, 0));
-        assert!((-16385..=-16383).contains(&r.x), "{}", r.x);
-        assert!((-32512..=-32511).contains(&r.slider), "{}", r.slider);
+        // The positive half spans 511 device steps.
+        let expect = -256.0 / 511.0 * 32767.0;
+        assert!((f64::from(r.x) - expect).abs() <= 1.0, "{}", r.x);
+        assert_eq!(r.slider, -32767);
     }
 
     #[test]
@@ -288,7 +289,7 @@ mod tests {
         assert_eq!(run(&c, frame(480, 512, 8, 128, 0, 0)).x, 0);
         // v = 0.55 -> (0.55 - 0.1) / 0.9 = 0.5.
         let r = run(&c, frame(512 + 281, 512, 8, 128, 0, 0));
-        let expect = (281.0 * 64.0 / 32767.0 - 0.1) / 0.9 * 32767.0;
+        let expect = (281.0 / 511.0 - 0.1) / 0.9 * 32767.0;
         assert!(
             (f64::from(r.x) - expect).abs() <= 1.0,
             "{} vs {expect}",
@@ -315,7 +316,8 @@ mod tests {
             points: vec![[0.0, 0.0], [0.25, 0.1], [0.5, 0.3], [0.75, 0.6], [1.0, 1.0]],
         };
         let r = run(&c, frame(512 + 256, 512, 8, 128, 0, 0));
-        assert!((f64::from(r.x) - 0.3 * 32767.0).abs() <= 1.0, "{}", r.x);
+        let expect = (0.3 + 1.2 * (256.0 / 511.0 - 0.5)) * 32767.0;
+        assert!((f64::from(r.x) - expect).abs() <= 1.0, "{}", r.x);
         let r = run(&c, frame(512 - 256, 512, 8, 128, 0, 0));
         assert!((f64::from(r.x) + 0.3 * 32767.0).abs() <= 1.0, "{}", r.x);
         let lut = build_lut(

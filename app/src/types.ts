@@ -101,7 +101,7 @@ export const OUTPUT_BUTTONS = 32;
 
 function defaultAxis(id: AxisId): AxisConfig {
   return {
-    calibration: { min: 0, center: 32768, max: 65535 },
+    calibration: { min: 0, center: 32768, max: id === 'x' || id === 'y' ? 1023 << 6 : 255 << 8 },
     invert: false,
     deadzone: { center: 0, min: 0, max: 0 },
     curve: { type: 'linear' },

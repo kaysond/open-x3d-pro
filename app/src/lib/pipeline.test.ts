@@ -13,7 +13,7 @@ describe('pipeline', () => {
   it('identity: center is 0, ends are ±32767', () => {
     expect(processAxis(axis(), 508 << 6)).toBe(-256);
     expect(processAxis(axis(), 32768)).toBe(0);
-    expect(processAxis(axis(), 65535)).toBe(32767);
+    expect(processAxis(axis(), 1023 << 6)).toBe(32767);
     expect(processAxis(axis(), 0)).toBe(-32767);
   });
 
@@ -29,7 +29,7 @@ describe('pipeline', () => {
     expect(response(dz, lut, 0.95)).toBe(32767);
     // Negative side uses the min-end deadzone (0 here).
     expect(response(dz, lut, -0.95) / 32767).toBeCloseTo(-(0.95 - 0.1) / 0.9, 3);
-    expect(deflection(dz, 32768 + 16384)).toBeCloseTo(0.5, 3);
+    expect(deflection(dz, 32768 + (511 << 5))).toBeCloseTo(0.5, 3);
   });
 
   it('interpolates points and mirrors them', () => {
@@ -37,7 +37,7 @@ describe('pipeline', () => {
     expect(curveAt(curve, 0.25)).toBeCloseTo(0.125);
     expect(curveAt(curve, 0.75)).toBeCloseTo(0.625);
     const a = axis({ curve });
-    expect(processAxis(a, 32768 + 16383)).toBe(8192);
+    expect(processAxis(a, 32768 + (511 << 5))).toBe(8192);
     expect(processAxis(a, 32768 - 16384)).toBe(-8192);
   });
 

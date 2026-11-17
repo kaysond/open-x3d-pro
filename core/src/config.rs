@@ -17,6 +17,14 @@ impl AxisId {
     pub fn index(self) -> usize {
         self as usize
     }
+
+    /// Highest reachable raw value in calibration units.
+    pub fn raw_max(self) -> u16 {
+        match self {
+            AxisId::X | AxisId::Y => 1023 << 6,
+            AxisId::Rz | AxisId::Slider => 255 << 8,
+        }
+    }
 }
 
 /// Raw units 0..65535 (10-bit axes `<< 6`, 8-bit axes `<< 8`).
@@ -80,7 +88,7 @@ impl AxisConfig {
             calibration: Calibration {
                 min: 0,
                 center: 32768,
-                max: 65535,
+                max: axis.raw_max(),
             },
             invert: false,
             deadzone: Deadzone::default(),
@@ -134,9 +142,11 @@ impl AxisConfig {
         Ok(())
     }
 
-    /// Converts v0.1.0 settings: full-range axes get a center; exponent, off-grid and decreasing
-    /// curves become non-decreasing grid points.
-    fn upgrade(&mut self) {
+    /// Converts older settings: unreachable maxima are clamped, full-range axes get a center;
+    /// exponent, off-grid and decreasing curves become non-decreasing grid points.
+    fn upgrade(&mut self, raw_max: u16) {
+        // Old defaults used 65535, which the device never reaches, so full deflection fell short of ±1.0.
+        self.calibration.max = self.calibration.max.min(raw_max);
         let Calibration { min, center, max } = self.calibration;
         if !(min < center && center < max) && max.saturating_sub(min) >= 2 {
             self.calibration.center = min + (max - min) / 2;
@@ -242,13 +252,13 @@ impl Default for DeviceConfig {
 impl DeviceConfig {
     /// Rewrites settings older releases allowed into their current form; call before [`Self::validate`].
     pub fn upgrade(&mut self) {
-        for a in [
-            &mut self.axes.x,
-            &mut self.axes.y,
-            &mut self.axes.rz,
-            &mut self.axes.slider,
+        for (a, id) in [
+            (&mut self.axes.x, AxisId::X),
+            (&mut self.axes.y, AxisId::Y),
+            (&mut self.axes.rz, AxisId::Rz),
+            (&mut self.axes.slider, AxisId::Slider),
         ] {
-            a.upgrade();
+            a.upgrade(id.raw_max());
         }
     }
 
@@ -429,6 +439,7 @@ mod tests {
     fn upgrade_converts_v0_1_profiles() {
         let mut v = serde_json::to_value(DeviceConfig::default()).unwrap();
         v["axes"]["slider"]["calibration"] = json!({ "min": 4096, "center": 4096, "max": 61440 });
+        v["axes"]["y"]["calibration"] = json!({ "min": 0, "center": 32768, "max": 65535 });
         v["axes"]["slider"]["curveMode"] = json!("full");
         v["axes"]["x"]["curve"] = json!({ "type": "exponent", "exponent": 2.0 });
         v["axes"]["rz"]["curve"] =
@@ -439,6 +450,7 @@ mod tests {
         c.upgrade();
         c.validate().unwrap();
         assert_eq!(c.axes.slider.calibration.center, 32768);
+        assert_eq!(c.axes.y.calibration.max, 1023 << 6);
         let Curve::Points { points } = &c.axes.x.curve else {
             panic!()
         };

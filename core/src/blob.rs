@@ -138,13 +138,13 @@ mod tests {
         assert_eq!(&b[0..4], b"X3DP");
         assert_eq!(&b[4..8], &[2, 0, 240, 0]);
         // The driver's built-in identity blob must carry the same CRC.
-        assert_eq!(blob_crc(&b), 0x9EA3_E13D);
-        // X axis: cal 0/32768/65535, dz 0, invert 0, target 0, lut[0] = 0, lut[16] = 32767.
-        assert_eq!(&b[12..18], &[0, 0, 0, 0x80, 0xFF, 0xFF]);
+        assert_eq!(blob_crc(&b), 0x0A5E_7748);
+        // X axis: cal 0/32768/65472, dz 0, invert 0, target 0, lut[0] = 0, lut[16] = 32767.
+        assert_eq!(&b[12..18], &[0, 0, 0, 0x80, 0xC0, 0xFF]);
         assert_eq!(&b[24..28], &[0, 0, 0, 0]);
         assert_eq!(&b[60..62], &[0xFF, 0x7F]);
-        // Slider (axis 3) at 12 + 150: target 3.
-        assert_eq!(&b[162..168], &[0, 0, 0, 0x80, 0xFF, 0xFF]);
+        // Slider (axis 3) at 12 + 150: cal max 65280, target 3.
+        assert_eq!(&b[162..168], &[0, 0, 0, 0x80, 0x00, 0xFF]);
         assert_eq!(&b[174..178], &[0, 3, 0, 0]);
         assert_eq!(b[212], HAT_HAT);
         assert_eq!(b[213], 0);

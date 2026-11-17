@@ -68,7 +68,7 @@ void pipeline_identity(X3D_CONFIG *out)
         X3D_AXIS_CONFIG *a = &out->axes[i];
         a->cal_min = 0;
         a->cal_center = 32768;
-        a->cal_max = 65535;
+        a->cal_max = i < 2 ? 1023u << 6 : 255u << 8; /* 10-bit X/Y, 8-bit Rz/slider */
         a->target = i;
         for (uint32_t k = 0; k <= 16; k++)
             a->lut[k] = (uint16_t)((k * X3D_OUT_MAX + 8u) / 16u); /* round(k*32767/16) */
