@@ -14,7 +14,7 @@ typedef struct _DEVICE_CONTEXT {
     WDFUSBDEVICE UsbDevice;
     WDFUSBPIPE InterruptPipe;
     WDFQUEUE ReadQueue;               /* manual: pending IOCTL_HID_READ_REPORT */
-    WDFWAITLOCK SetFeatureLock;       /* serialises apply + persist of SET_FEATURE */
+    WDFWAITLOCK SetFeatureLock;       /* serializes apply + persist of SET_FEATURE */
     HID_DEVICE_ATTRIBUTES HidAttributes; /* written in PrepareHardware only */
 
     /* Everything below is guarded by Lock: the continuous reader may complete on

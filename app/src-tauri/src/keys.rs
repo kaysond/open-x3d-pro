@@ -221,7 +221,7 @@ pub fn send(events: &[KeyEvent]) {
     if inputs.is_empty() {
         return;
     }
-    // SAFETY: `inputs` is a valid slice of initialised INPUT structs for the duration of the call.
+    // SAFETY: `inputs` is a valid slice of initialized INPUT structs for the duration of the call.
     let sent = unsafe {
         SendInput(
             inputs.len() as u32,

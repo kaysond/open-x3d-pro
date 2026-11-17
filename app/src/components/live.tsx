@@ -7,7 +7,7 @@ interface AxisBarProps {
   value: number;
   min?: number;
   max: number;
-  /** Fill grows from the middle; for axes that rest at centre. */
+  /** Fill grows from the middle; for axes that rest at center. */
   centered?: boolean;
   text?: string;
 }
@@ -45,7 +45,7 @@ export function ButtonGrid({ count, mask }: ButtonGridProps) {
 }
 
 const ARROWS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
-// 3×3 layout of hat values (0 = N, clockwise); 8 = centred.
+// 3×3 layout of hat values (0 = N, clockwise); 8 = centered.
 const ROSE = [7, 0, 1, 6, 8, 2, 5, 4, 3];
 
 export function HatRose({ label, value }: { label: string; value: number }) {

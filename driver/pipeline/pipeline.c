@@ -106,7 +106,7 @@ static int16_t process_axis(const X3D_AXIS_CONFIG *a, unsigned raw16)
         v = -v;
     double m = v < 0.0 ? -v : v;
     double dz_end = v < 0.0 ? dzmin : dzmax;
-    /* inside the centre deadzone sign(v) counts as 0, so a LUT with lut[0] > 0
+    /* inside the center deadzone sign(v) counts as 0, so a LUT with lut[0] > 0
      * still rests at exactly 0 (same as the Rust reference) */
     if (m <= dzc)
         return 0;
@@ -138,7 +138,7 @@ void pipeline_process(const X3D_CONFIG *cfg, const uint8_t raw[X3D_RAW_SIZE], X3
     int16_t axes[4] = {0, 0, 0, 0};
     uint32_t buttons = 0;
 
-    /* assigned, not brace-initialised: MSVC C warns (C4204) on non-constant initialisers */
+    /* assigned, not brace-initialized: MSVC C warns (C4204) on non-constant initializers */
     phys16[X3D_AXIS_X] = x << 6;
     phys16[X3D_AXIS_Y] = y << 6;
     phys16[X3D_AXIS_RZ] = (unsigned)raw[3] << 8;

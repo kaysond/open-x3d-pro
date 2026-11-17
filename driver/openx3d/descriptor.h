@@ -26,7 +26,7 @@ static const UCHAR G_ReportDescriptor[] = {
     0x65, 0x14,                   /*   Unit (Eng Rot: Degrees) */
     0x75, 0x04,                   /*   Report Size (4) */
     0x95, 0x01,                   /*   Report Count (1) */
-    0x81, 0x42,                   /*   Input (Data,Var,Abs,Null State): 8 = centred */
+    0x81, 0x42,                   /*   Input (Data,Var,Abs,Null State): 8 = centered */
     0x45, 0x00,                   /*   Physical Maximum (0): physical = logical again */
     0x65, 0x00,                   /*   Unit (None) */
     0x81, 0x03,                   /*   Input (Const,Var,Abs): 4-bit pad */

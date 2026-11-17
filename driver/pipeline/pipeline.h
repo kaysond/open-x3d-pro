@@ -55,7 +55,7 @@ typedef struct X3D_CONFIG {
 typedef struct X3D_JOY_REPORT {
     uint8_t id;
     int16_t x, y, rz, slider;
-    uint8_t hat;                        /* low nibble: 0..7, 8 = centred; high nibble: pad */
+    uint8_t hat;                        /* low nibble: 0..7, 8 = centered; high nibble: pad */
     uint32_t buttons;                   /* bit n = button n+1 */
 } X3D_JOY_REPORT;
 #pragma pack(pop)

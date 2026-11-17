@@ -18,7 +18,7 @@ pub struct RawReport {
     pub y: u16,
     pub rz: u8,
     pub slider: u8,
-    /// 0..7 clockwise from north, 8 = centred.
+    /// 0..7 clockwise from north, 8 = centered.
     pub hat: u8,
     /// Physical buttons 1..12 in bits 0..11.
     pub buttons: u16,
@@ -130,7 +130,7 @@ fn process_axis(a: &CompiledAxis, raw16: u16) -> i16 {
     let dz_end = if v < 0.0 { dz(a.dz_min) } else { dz(a.dz_max) };
     let m = v.abs();
     if m <= dzc {
-        // sign(v) counts as 0 here, so a LUT with lut[0] > 0 still rests at centre.
+        // sign(v) counts as 0 here, so a LUT with lut[0] > 0 still rests at center.
         return 0;
     }
     let m = ((m - dzc) / (1.0 - dzc - dz_end)).clamp(0.0, 1.0);
@@ -347,7 +347,7 @@ mod tests {
         let r = run(&c, frame(1023, 512, 8, 128, 0, 0));
         assert_eq!(r.x, 0);
         assert!(r.y > 32700);
-        // Rz and slider both on X: slider (higher index) wins; Rz's own slot rests at centre.
+        // Rz and slider both on X: slider (higher index) wins; Rz's own slot rests at center.
         let mut c = DeviceConfig::default();
         c.axes.rz.target = Some(AxisId::X);
         c.axes.slider.target = Some(AxisId::X);

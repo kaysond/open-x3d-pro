@@ -1,6 +1,6 @@
 #include "driver.h"
 
-/* X=512 Y=512 hat centred Rz=128: what GET_INPUT_REPORT returns before the first USB frame. */
+/* X=512 Y=512 hat centered Rz=128: what GET_INPUT_REPORT returns before the first USB frame. */
 static const UCHAR kNeutralRaw[X3D_RAW_SIZE] = { 0x00, 0x02, 0x88, 0x80, 0x00, 0x00, 0x00 };
 
 NTSTATUS
@@ -41,7 +41,7 @@ EvtDeviceAdd(_In_ WDFDRIVER Driver, _Inout_ PWDFDEVICE_INIT DeviceInit)
         return status;
     }
 
-    ctx = GetDeviceContext(device); /* zero-initialised by the framework */
+    ctx = GetDeviceContext(device); /* zero-initialized by the framework */
     ctx->HidAttributes.Size = (ULONG)sizeof(HID_DEVICE_ATTRIBUTES);
 
     WDF_OBJECT_ATTRIBUTES_INIT(&attributes);

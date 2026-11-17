@@ -42,7 +42,7 @@ Suggested reading order: core → driver → backend → frontend → installer 
   Holds the shared version (`[workspace.package]`) and the release profile (LTO, strip).
 - [Cargo.lock](Cargo.lock): pinned Rust dependencies. Generated.
 - [rust-toolchain.toml](rust-toolchain.toml): pins Rust 1.98.1 with rustfmt and clippy; CI
-  runs `rustup toolchain install` to honour it.
+  runs `rustup toolchain install` to honor it.
 - [rustfmt.toml](rustfmt.toml): formatter settings for `cargo fmt`.
 - [README.md](README.md): user-facing overview, installation, and the long "Driver signing"
   and "Verifying a download" sections that the installer and release notes link to. The
@@ -239,7 +239,7 @@ Linux; Tauri, HID and Win32 code is behind `cfg(windows)`.
   down/up events (shared keys stay down until the last chord releases); `send` injects them
   with `SendInput`.
 - [app/src-tauri/src/calibration.rs](app/src-tauri/src/calibration.rs): `Calibrator`
-  tracks per-axis min/max between `start` and `finish`; centre is the value at finish.
+  tracks per-axis min/max between `start` and `finish`; center is the value at finish.
 - [app/src-tauri/src/watcher.rs](app/src-tauri/src/watcher.rs): Win32 glue feeding the
   switcher. A `SetWinEventHook` foreground hook (debounced 250 ms) and, in "running" mode, a
   2-second process scan. `list_windows` backs the "Add running app" picker.
@@ -339,7 +339,7 @@ and events; in a plain browser it runs against an in-memory mock.
   identity config.
 - [app/src/lib/pipeline.test.ts](app/src/lib/pipeline.test.ts): axis math and LUTs in
   the TS port.
-- [app/src/store.test.ts](app/src/store.test.ts): store behaviour against the mock: dirty
+- [app/src/store.test.ts](app/src/store.test.ts): store behavior against the mock: dirty
   tracking, save during edits, discard, preview debounce, settings queue, rejected previews.
 
 ## 6. Installer

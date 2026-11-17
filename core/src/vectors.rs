@@ -27,11 +27,11 @@ pub(crate) fn frame(x: u16, y: u16, hat: u8, rz: u8, slider: u8, buttons: u16) -
 fn raw_cases() -> Vec<[u8; 7]> {
     let mut v = vec![
         [0xfc, 0xf1, 0x87, 0x80, 0x00, 0x99, 0x00], // resting stick as captured
-        frame(512, 512, 8, 128, 0, 0),              // exact centre
+        frame(512, 512, 8, 128, 0, 0),              // exact center
         frame(0, 0, 0, 0, 0, 0x001),                // all minimums
         frame(1023, 1023, 4, 255, 255, 0xFFF),      // all maximums, every button
         frame(256, 768, 2, 64, 192, 0x0A5),
-        frame(530, 495, 6, 131, 10, 0x800), // near centre, shift-only
+        frame(530, 495, 6, 131, 10, 0x800), // near center, shift-only
         frame(560, 470, 8, 140, 20, 0x801), // just past small deadzones, shift + 1
         frame(900, 120, 1, 220, 64, 0x5A0),
         frame(700, 300, 7, 30, 128, 0x003),
