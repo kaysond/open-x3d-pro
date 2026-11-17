@@ -28,6 +28,7 @@ export interface Commands {
   preview_config: [{ config: DeviceConfig }, null];
   end_preview: [NoArgs, null];
   list_windows: [NoArgs, WindowInfo[]];
+  pick_exe: [NoArgs, string | null];
   save_settings: [{ settings: Settings }, Settings];
   start_calibration: [{ axis: AxisId }, null];
   finish_calibration: [{ axis: AxisId }, Calibration];
@@ -69,6 +70,7 @@ export const api = {
   previewConfig: (config: DeviceConfig) => transport.invoke('preview_config', { config }),
   endPreview: () => transport.invoke('end_preview', {}),
   listWindows: () => transport.invoke('list_windows', {}),
+  pickExe: () => transport.invoke('pick_exe', {}),
   saveSettings: (settings: Settings) => transport.invoke('save_settings', { settings }),
   startCalibration: (axis: AxisId) => transport.invoke('start_calibration', { axis }),
   finishCalibration: (axis: AxisId) => transport.invoke('finish_calibration', { axis }),

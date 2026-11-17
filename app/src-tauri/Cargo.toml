@@ -33,6 +33,7 @@ windows-sys = { version = "0.61", features = [
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
 ] }
+tauri-plugin-dialog = "2"
 
 [target.'cfg(windows)'.build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -103,6 +103,19 @@ pub fn list_windows() -> Result<Vec<WindowInfo>, String> {
     Ok(crate::watcher::list_windows())
 }
 
+/// Native file picker for a program to match; `None` when cancelled.
+#[tauri::command]
+pub async fn pick_exe(window: tauri::Window) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    // Parented so it stays modal over the app instead of opening behind it.
+    let dialog = window.dialog().file().set_parent(&window);
+    // Linux executables have no extension to filter on.
+    #[cfg(windows)]
+    let dialog = dialog.add_filter("Programs", &["exe"]);
+    // Async command, so blocking here keeps the dialog off the main thread.
+    dialog.blocking_pick_file().map(|p| p.to_string())
+}
+
 #[tauri::command]
 pub fn save_settings(
     app: AppHandle,

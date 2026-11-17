@@ -42,6 +42,7 @@ mod app {
                     .arg(MINIMIZED_ARG)
                     .build(),
             )
+            .plugin(tauri_plugin_dialog::init())
             .invoke_handler(tauri::generate_handler![
                 commands::get_state,
                 commands::list_profiles,
@@ -52,6 +53,7 @@ mod app {
                 commands::preview_config,
                 commands::end_preview,
                 commands::list_windows,
+                commands::pick_exe,
                 commands::save_settings,
                 commands::start_calibration,
                 commands::finish_calibration,

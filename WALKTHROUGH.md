@@ -322,7 +322,7 @@ and events; in a plain browser it runs against an in-memory mock.
   layer, hat mode, and key bindings with live chord capture (Esc cancels).
 - [app/src/pages/ProfilesPage.tsx](app/src/pages/ProfilesPage.tsx): profile list with
   new/set default/activate/delete, and automatic activation: an on/off switch and
-  executable paths, added by typing, from the file picker, or from the
+  executable paths, added by typing, from the native file dialog (`pick_exe`), or from the
   "Add running app" picker (`RunningAppsModal`, a native `<dialog>`).
 - [app/src/pages/SettingsPage.tsx](app/src/pages/SettingsPage.tsx): autostart, pause
   switching, match mode, plus driver/joystick status and the code-signing note.

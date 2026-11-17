@@ -156,20 +156,17 @@ export function ProfilesPage() {
                   setNewPath(e.target.value);
                 }}
               />
-              <label className={styles.button}>
+              <button
+                type="button"
+                onClick={() =>
+                  void guard(async () => {
+                    const path = await api.pickExe();
+                    if (path) addPath(path);
+                  })
+                }
+              >
                 Add path…
-                <input
-                  type="file"
-                  accept=".exe"
-                  hidden
-                  onChange={(e) => {
-                    // Webviews only expose the file name, which the matcher accepts.
-                    const file = e.currentTarget.files?.[0];
-                    if (file) addPath(file.name);
-                    e.currentTarget.value = '';
-                  }}
-                />
-              </label>
+              </button>
               <button
                 type="button"
                 onClick={() => {

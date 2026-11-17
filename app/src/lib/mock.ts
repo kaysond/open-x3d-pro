@@ -131,6 +131,7 @@ export function createMockTransport(): Transport {
       preview = null;
       return null;
     },
+    pick_exe: () => 'C:\\Games\\Example\\example.exe',
     list_windows: () => [
       { pid: 4242, exePath: DCS_EXE, title: 'Digital Combat Simulator' },
       {
