@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cx, Select, Slider, Toggle } from '../components/controls';
 import { CurveEditor } from '../components/CurveEditor';
 import { api } from '../lib/ipc';
@@ -44,9 +44,39 @@ function CalInput({ value, max, onCommit }: { value: number; max: number; onComm
   );
 }
 
+function CopyCurveModal({ from, onPick, onClose }: { from: AxisId; onPick: (to: AxisId) => void; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    // StrictMode runs effects twice; showModal throws on an open dialog in older WebView2.
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+  }, []);
+  return (
+    <dialog ref={dialog} className={styles.modal} onClose={onClose}>
+      <h2>Copy {AXIS_LABELS[from]} Curve To</h2>
+      <div className={styles.row}>
+        {AXES.filter((id) => id !== from).map((id) => (
+          <button
+            key={id}
+            className={styles.primary}
+            onClick={() => {
+              onPick(id);
+            }}
+          >
+            {AXIS_LABELS[id]}
+          </button>
+        ))}
+        <button style={{ marginLeft: 'auto' }} onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 export function AxesPage() {
   const [axis, setAxis] = useState<AxisId>('x');
   const [calibrating, setCalibrating] = useState<AxisId | null>(null);
+  const [copying, setCopying] = useState(false);
   const cfg = useStore((s) => s.draft?.config.axes[axis]);
   const frame = useStore((s) => s.frame);
   const editConfig = useStore((s) => s.editConfig);
@@ -240,7 +270,29 @@ export function AxesPage() {
               Raw {raw ?? '—'} → In {input?.toFixed(3) ?? '—'} → Out{' '}
               {output === null ? '—' : (output / OUT_MAX).toFixed(3)}
             </p>
+            <button
+              className={styles.copyCurve}
+              onClick={() => {
+                setCopying(true);
+              }}
+            >
+              Copy to Axis…
+            </button>
           </fieldset>
+          {copying && (
+            <CopyCurveModal
+              from={axis}
+              onPick={(to) => {
+                setCopying(false);
+                editConfig((c) => {
+                  c.axes[to].curve = structuredClone(cfg.curve);
+                });
+              }}
+              onClose={() => {
+                setCopying(false);
+              }}
+            />
+          )}
         </section>
       </div>
     </div>
