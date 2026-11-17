@@ -11,6 +11,7 @@ import { AXES, AXIS_LABELS } from '../types';
 const pct = (v: number) => `${Math.round(v * 100)} %`;
 // Two deadzones at 0.5 would leave no live range, which the backend rejects.
 const DZ_MAX = 0.49;
+const CAL_LABELS = { min: 'Min', center: 'Center', max: 'Max' } as const;
 const DZ_LABELS = { center: 'Center Deadzone', min: 'Low Deadzone', max: 'High Deadzone' } as const;
 
 const TARGETS: { value: AxisId | null; label: string }[] = [
@@ -116,7 +117,7 @@ export function AxesPage() {
             <div className={styles.row}>
               {(['min', 'center', 'max'] as const).map((key) => (
                 <label key={key} className={styles.field}>
-                  <span className={styles.fieldLabel}>{key}</span>
+                  <span className={styles.fieldLabel}>{CAL_LABELS[key]}</span>
                   <CalInput
                     value={cfg.calibration[key] >> shift}
                     max={deviceMax}
@@ -236,7 +237,7 @@ export function AxesPage() {
               </p>
             )}
             <p className={styles.mono}>
-              raw {raw ?? '—'} → in {input?.toFixed(3) ?? '—'} → out{' '}
+              Raw {raw ?? '—'} → In {input?.toFixed(3) ?? '—'} → Out{' '}
               {output === null ? '—' : (output / OUT_MAX).toFixed(3)}
             </p>
           </fieldset>

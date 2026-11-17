@@ -27,15 +27,15 @@ function StatusBar() {
   return (
     <div className={styles.wrap}>
       <span className={cx(styles.badge, appState.deviceConnected ? styles.ok : styles.bad)}>
-        {appState.deviceConnected ? 'joystick connected' : 'joystick not connected'}
+        {appState.deviceConnected ? 'Joystick connected' : 'Joystick not connected'}
       </span>
       <span className={cx(styles.badge, appState.driverInstalled ? styles.ok : styles.warn)}>
-        {appState.driverInstalled ? `driver ${appState.driverVersion ?? ''}` : 'no driver (preview only)'}
+        {appState.driverInstalled ? `Driver ${appState.driverVersion ?? ''}` : 'No driver (preview only)'}
       </span>
       <span className={styles.badge}>
-        active: {active?.name ?? '—'}
+        Active: {active?.name ?? '—'}
         {reason && ` (${reason})`}
-        {appState.settings.switchingPaused && ' · switching paused'}
+        {appState.settings.switchingPaused && ' · Switching paused'}
       </span>
     </div>
   );

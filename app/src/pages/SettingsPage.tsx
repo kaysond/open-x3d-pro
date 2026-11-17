@@ -11,7 +11,7 @@ export function SettingsPage() {
   return (
     <div className={styles.stack}>
       <section className={styles.card}>
-        <h2>Behaviour</h2>
+        <h2>Behavior</h2>
         <Toggle
           label="Start with Windows (in the tray)"
           checked={settings.autostart}
@@ -41,13 +41,13 @@ export function SettingsPage() {
               <th>Driver</th>
               <td>
                 {appState.driverInstalled
-                  ? `installed, version ${appState.driverVersion ?? 'unknown'}`
-                  : 'not installed — the app applies profiles to its own live view only'}
+                  ? `Installed, version ${appState.driverVersion ?? 'unknown'}`
+                  : 'Not installed — the app applies profiles to its own live view only'}
               </td>
             </tr>
             <tr>
               <th>Joystick</th>
-              <td>{appState.deviceConnected ? 'connected' : 'not connected'}</td>
+              <td>{appState.deviceConnected ? 'Connected' : 'Not connected'}</td>
             </tr>
             <tr>
               <th>Matched executable</th>

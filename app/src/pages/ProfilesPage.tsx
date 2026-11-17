@@ -81,8 +81,8 @@ export function ProfilesPage() {
               >
                 <strong>{p.name}</strong>
                 <span>
-                  {p.isDefault && <span className={styles.badge}>default</span>}
-                  {p.id === activeId && <span className={cx(styles.badge, styles.ok)}>active</span>}
+                  {p.isDefault && <span className={styles.badge}>Default</span>}
+                  {p.id === activeId && <span className={cx(styles.badge, styles.ok)}>Active</span>}
                   <span className={styles.muted}>
                     {p.exePaths.length} exe{p.exePaths.length === 1 ? '' : 's'}
                   </span>
